@@ -2,7 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include "glmclient.h"
+#include "src/app/ChatController.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -13,21 +13,25 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    // Controller 由 main 注入(ADR-008),不自建
+    explicit MainWindow(glm::ChatController *controller, QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
-    void onSendClicked();                         //点发送按钮
-    void onReplyReceived(const QString &content); //收到 GLM 回复
-    void onErrorOccurred(const QString &error);   //网络/解析出错
+    void onSendClicked();                                 // 发送/停止(按状态切换)
+    void onChunkReceived(const QString &text);            // 流式增量(打字机)
+    void onFinished(const QString &fullText);              // 生成完成
+    void onErrorOccurred(const QString &error);
+    void onStateChanged(glm::ChatController::State s);     // 状态→按钮态
 
 private:
     Ui::MainWindow *ui;
-    GlmClient *m_glm = nullptr;
-    //第一步手写控件(后面模块化时拆到独立 ChatWidget)
+    glm::ChatController *m_controller;
     class QTextEdit *m_inputEdit;
     class QTextEdit *m_outputEdit;
-    class QPushButton *m_sendBtn;
+    class QPushButton *m_sendBtn;   // 发送/停止复用,按状态切文字
+
+    void updateButtonByState(glm::ChatController::State s);
 };
 
 #endif // MAINWINDOW_H
