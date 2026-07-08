@@ -33,14 +33,21 @@ MainWindow::MainWindow(QWidget *parent)
 
     setCentralWidget(central);
 
-    //=== 填你的 GLM API Key ===
-    //把下面字符串换成 bigmodel.cn 控制台复制的真实 key
-    //(后面做"API Key 加密存储"模块时改用 QSettings + QCryptographicHash,不硬编码)
-    m_glm = new GlmClient(QStringLiteral("1983eca8588b4ab0a997d07f8e13f490.JAASIAAmWs2pJIKR"), this);
-
+    //=== API Key:从环境变量读(不硬编码,防随代码进 git 泄露)===
+    //设法:Qt Creator → 左侧 Projects → Run → Run Environment → 添加 GLM_API_KEY=你的key
+    //或 Windows 系统环境变量新建 GLM_API_KEY(改后重启 Qt Creator)
+    const QByteArray envKey = qgetenv("GLM_API_KEY");
+    if (envKey.isEmpty()) {
+        m_outputEdit->append(QStringLiteral("[配置错误] 未设置环境变量 GLM_API_KEY"));
+        m_outputEdit->append(QStringLiteral("  Qt Creator: Projects → Run → Run Environment → 添加 GLM_API_KEY=你的key"));
+        m_outputEdit->append(QStringLiteral("  或 Windows 系统环境变量新建 GLM_API_KEY(改后重启 Qt Creator)"));
+        m_sendBtn->setEnabled(false);
+    } else {
+        m_glm = new GlmClient(QString::fromLocal8Bit(envKey), this);
+        connect(m_glm, &GlmClient::replyReceived, this, &MainWindow::onReplyReceived);
+        connect(m_glm, &GlmClient::errorOccurred, this, &MainWindow::onErrorOccurred);
+    }
     connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
-    connect(m_glm, &GlmClient::replyReceived, this, &MainWindow::onReplyReceived);
-    connect(m_glm, &GlmClient::errorOccurred, this, &MainWindow::onErrorOccurred);
 }
 
 MainWindow::~MainWindow()
@@ -50,6 +57,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::onSendClicked()
 {
+    if (!m_glm) return;   //key 未配置时 m_glm 为空,防崩溃
     const QString text = m_inputEdit->toPlainText().trimmed();
     if(text.isEmpty()) return;
 

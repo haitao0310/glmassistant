@@ -23,7 +23,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
-    GlmClient *m_glm;
+    GlmClient *m_glm = nullptr;
     //第一步手写控件(后面模块化时拆到独立 ChatWidget)
     class QTextEdit *m_inputEdit;
     class QTextEdit *m_outputEdit;
