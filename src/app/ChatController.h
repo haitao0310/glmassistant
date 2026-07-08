@@ -10,7 +10,10 @@
 
 namespace glm {
 
+class SessionManager;
+
 // 业务层:协调 UI ↔ Provider,持多轮历史 + 生成参数,管理状态机(ADR-009)。
+// P3:历史持久化到 SQLite(经 SessionManager.currentSessionId + DatabaseManager)。
 class ChatController : public QObject
 {
     Q_OBJECT
@@ -18,12 +21,13 @@ public:
     enum class State { Idle, Sending, Streaming, Finished, Error, Aborted };
     Q_ENUM(State)
 
-    explicit ChatController(ILlmProvider *provider, QObject *parent = nullptr);
+    ChatController(ILlmProvider *provider, SessionManager *sessions, QObject *parent = nullptr);
 
-    void send(const QString &userText);             // 加入历史 + 带完整 messages 请求
+    void send(const QString &userText);
     void stop();
-    void clearHistory();                             // 清空历史(新对话)
-    void setParams(const GenerationParams &p);       // ParamPanel 调参
+    void clearHistory();
+    void setParams(const GenerationParams &p);
+    void setSession(const QList<Message> &msgs);     // 会话切换:重置历史
 
     State state() const { return m_state; }
     QList<Message> history() const { return m_messages; }
@@ -34,18 +38,22 @@ signals:
     void chunkReceived(const QString &text);
     void finished(const QString &fullText);
     void errorOccurred(const QString &error);
-    void messageAppended(const glm::Message &m);     // 新消息入历史(UI 同步 ChatModel)
+    void messageAppended(const glm::Message &m);
+    void historyReplaced(const QList<glm::Message> &msgs);   // 会话切换:UI 重建 ChatModel
     void tokenReported(int promptTokens, int completionTokens, int totalTokens);
 
 private:
     ILlmProvider *m_provider;
+    SessionManager *m_sessions;
     LlmReply *m_currentReply = nullptr;
     State m_state = State::Idle;
-    QList<Message> m_messages;                        // 多轮历史
-    GenerationParams m_params;                        // 当前生成参数
+    QList<Message> m_messages;
+    GenerationParams m_params;
 
     void setState(State s);
     void connectReply(LlmReply *reply);
+    void persistMessage(const Message &m);           // 入 DB(当前会话)
+    void persistUpdateLast(const QString &content);   // 流式更新末条
 };
 
 } // namespace glm

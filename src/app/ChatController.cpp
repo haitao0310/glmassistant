@@ -1,15 +1,32 @@
 #include "ChatController.h"
 
+#include "../app/SessionManager.h"
+#include "../data/DatabaseManager.h"
 #include "../infrastructure/Logger.h"
 
 #include <QDateTime>
 
 namespace glm {
 
-ChatController::ChatController(ILlmProvider *provider, QObject *parent)
+ChatController::ChatController(ILlmProvider *provider, SessionManager *sessions, QObject *parent)
     : QObject(parent)
     , m_provider(provider)
+    , m_sessions(sessions)
 {
+}
+
+void ChatController::persistMessage(const Message &m)
+{
+    if (!m_sessions) return;
+    const QString sid = m_sessions->currentSessionId();
+    if (!sid.isEmpty()) DatabaseManager::instance().appendMessage(sid, m);
+}
+
+void ChatController::persistUpdateLast(const QString &content)
+{
+    if (!m_sessions) return;
+    const QString sid = m_sessions->currentSessionId();
+    if (!sid.isEmpty()) DatabaseManager::instance().updateLastMessageContent(sid, content);
 }
 
 void ChatController::send(const QString &userText)
@@ -20,15 +37,15 @@ void ChatController::send(const QString &userText)
     }
     if (!m_provider) { emit errorOccurred(QStringLiteral("未配置 Provider")); return; }
 
-    // 用户消息入历史(P2 多轮)
+    // 用户消息入历史(内存 + DB)
     Message userMsg;
     userMsg.role = Role::User;
     userMsg.content = userText;
     userMsg.timestamp = QDateTime::currentMSecsSinceEpoch();
     m_messages.append(userMsg);
     emit messageAppended(userMsg);
+    persistMessage(userMsg);
 
-    // 构造请求:完整历史 + 当前参数
     LlmRequest req;
     req.model = m_params.model;
     req.messages = m_messages;
@@ -39,12 +56,13 @@ void ChatController::send(const QString &userText)
 
     setState(State::Sending);
 
-    // 预占 assistant 消息(流式 chunk 填充)
+    // 预占 assistant(内存 + DB)
     Message asstMsg;
     asstMsg.role = Role::Assistant;
     asstMsg.timestamp = QDateTime::currentMSecsSinceEpoch();
     m_messages.append(asstMsg);
     emit messageAppended(asstMsg);
+    persistMessage(asstMsg);
 
     m_currentReply = m_provider->send(req);
     m_currentReply->setParent(this);
@@ -71,12 +89,21 @@ void ChatController::setParams(const GenerationParams &p)
     logDebug("chat", QStringLiteral("params: model=%1 temp=%2").arg(p.model).arg(p.temperature));
 }
 
+void ChatController::setSession(const QList<Message> &msgs)
+{
+    if (m_currentReply) m_currentReply->abort();
+    m_messages = msgs;
+    setState(State::Idle);
+    emit historyReplaced(msgs);   // UI 重建 ChatModel
+}
+
 void ChatController::connectReply(LlmReply *reply)
 {
     QObject::connect(reply, &LlmReply::chunkReceived, this, [this](const QString &text) {
         if (m_state == State::Sending) setState(State::Streaming);
         if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant) {
-            m_messages.last().content += text;   // 累积到历史(下次请求带正确 assistant 回复)
+            m_messages.last().content += text;
+            persistUpdateLast(m_messages.last().content);   // DB 流式更新
         }
         emit chunkReceived(text);
     });
@@ -84,7 +111,8 @@ void ChatController::connectReply(LlmReply *reply)
     QObject::connect(reply, &LlmReply::finished, this, [this](const QString &fullText) {
         if (m_state == State::Aborted) return;
         if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant) {
-            m_messages.last().content = fullText;   // 全量覆盖保历史准
+            m_messages.last().content = fullText;
+            persistUpdateLast(fullText);   // DB 全量
         }
         setState(State::Finished);
         emit finished(fullText);
@@ -92,10 +120,10 @@ void ChatController::connectReply(LlmReply *reply)
 
     QObject::connect(reply, &LlmReply::errorOccurred, this, [this](const QString &err) {
         if (m_state == State::Aborted) return;
-        // 错误回滚预占的空 assistant
         if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant
             && m_messages.last().content.isEmpty()) {
             m_messages.removeLast();
+            // DB 末条留空 assistant(TODO:清理空行,或改 deleteLastMessage)
         }
         setState(State::Error);
         emit errorOccurred(err);
