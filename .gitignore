@@ -1,0 +1,37 @@
+# Qt Creator / 用户配置
+*.user
+*.user.*
+.qtcreator/
+CMakeLists.txt.user*
+
+# Build 输出
+build/
+build-*/
+debug/
+release/
+
+# CMake 生成
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# 编译产物
+*.o
+*.obj
+*.exe
+*.dll
+*.lib
+*.a
+
+# 临时/系统
+*.tmp
+*.bak
+*~
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
