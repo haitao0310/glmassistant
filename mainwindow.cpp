@@ -1,12 +1,16 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include "src/app/ChatModel.h"
+#include "src/ui/ParamPanel.h"
+
+#include <QListView>
 #include <QTextEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <QTextCursor>
 
 MainWindow::MainWindow(glm::ChatController *controller, QWidget *parent)
     : QMainWindow(parent)
@@ -14,35 +18,41 @@ MainWindow::MainWindow(glm::ChatController *controller, QWidget *parent)
     , m_controller(controller)
 {
     ui->setupUi(this);
-    setWindowTitle(tr("GlmAssistant - P1 流式"));
+    setWindowTitle(tr("GlmAssistant - P2 多轮 + 参数"));
 
-    // P1:手写中央 UI(P3 拆到独立 ChatWidget + Model/View)
-    auto *central = new QWidget(this);
-    auto *layout = new QVBoxLayout(central);
-
+    m_chatModel = new glm::ChatModel(this);
+    m_paramPanel = new glm::ParamPanel(this);
+    m_messageList = new QListView;
+    m_messageList->setModel(m_chatModel);
     m_inputEdit = new QTextEdit;
     m_inputEdit->setPlaceholderText(tr("输入消息..."));
-    m_outputEdit = new QTextEdit;
-    m_outputEdit->setPlaceholderText(tr("GLM 回复显示在这里..."));
-    m_outputEdit->setReadOnly(true);
+    m_inputEdit->setMaximumHeight(80);
     m_sendBtn = new QPushButton(tr("发送"));
+    m_statusLabel = new QLabel(tr("就绪"));
 
-    layout->addWidget(new QLabel(tr("输入:")));
-    layout->addWidget(m_inputEdit);
-    layout->addWidget(m_sendBtn);
-    layout->addWidget(new QLabel(tr("回复:")));
-    layout->addWidget(m_outputEdit);
-
+    // 布局:左 ParamPanel | 右(对话列表 + 输入 + 按钮 + 状态)
+    auto *central = new QWidget(this);
+    auto *hbox = new QHBoxLayout(central);
+    hbox->addWidget(m_paramPanel);
+    auto *vbox = new QVBoxLayout;
+    vbox->addWidget(new QLabel(tr("对话")));
+    vbox->addWidget(m_messageList, 1);
+    vbox->addWidget(m_inputEdit);
+    vbox->addWidget(m_sendBtn);
+    vbox->addWidget(m_statusLabel);
+    hbox->addLayout(vbox, 1);
     setCentralWidget(central);
 
-    // 连接 Controller 信号(UI 只接 Controller,不碰 Provider)
-    connect(m_controller, &glm::ChatController::chunkReceived, this, &MainWindow::onChunkReceived);
-    connect(m_controller, &glm::ChatController::finished, this, &MainWindow::onFinished);
-    connect(m_controller, &glm::ChatController::errorOccurred, this, &MainWindow::onErrorOccurred);
+    // Controller → ChatModel(数据同步,Model/View)
+    connect(m_controller, &glm::ChatController::messageAppended, m_chatModel, &glm::ChatModel::appendMessage);
+    connect(m_controller, &glm::ChatController::chunkReceived, m_chatModel, &glm::ChatModel::appendChunkToLast);
     connect(m_controller, &glm::ChatController::stateChanged, this, &MainWindow::onStateChanged);
+    connect(m_controller, &glm::ChatController::errorOccurred, this, &MainWindow::onErrorOccurred);
+    // ParamPanel → Controller
+    connect(m_paramPanel, &glm::ParamPanel::paramsChanged, m_controller, &glm::ChatController::setParams);
+    m_controller->setParams(m_paramPanel->params());   // 初始参数
 
     connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
-
     updateButtonByState(m_controller->state());
 }
 
@@ -54,42 +64,39 @@ MainWindow::~MainWindow()
 void MainWindow::onSendClicked()
 {
     using S = glm::ChatController::State;
-    const auto state = m_controller->state();
-    if (state == S::Streaming || state == S::Sending) {
+    const auto st = m_controller->state();
+    if (st == S::Sending || st == S::Streaming) {
         m_controller->stop();   // 生成中:点 = 停止
         return;
     }
-    // 空闲/终态:点 = 发送
     const QString text = m_inputEdit->toPlainText().trimmed();
     if (text.isEmpty()) return;
-
-    m_outputEdit->append(tr("我: ") + text);
     m_inputEdit->clear();
-    m_outputEdit->append(QStringLiteral("GLM: "));   // 占位行,流式 chunk 追加到此行末
-    m_controller->send(text);
-}
-
-void MainWindow::onChunkReceived(const QString &text)
-{
-    // 打字机:增量追加到末尾("GLM: " 行后)
-    m_outputEdit->moveCursor(QTextCursor::End);
-    m_outputEdit->insertPlainText(text);
-}
-
-void MainWindow::onFinished(const QString &fullText)
-{
-    Q_UNUSED(fullText);
-    m_outputEdit->append(QString());   // 回复结束,空行分隔
-}
-
-void MainWindow::onErrorOccurred(const QString &error)
-{
-    m_outputEdit->append(tr("[错误] ") + error);
+    m_controller->send(text);   // Controller 加历史 + messageAppended → ChatModel 自动更新
 }
 
 void MainWindow::onStateChanged(glm::ChatController::State s)
 {
-    updateButtonByState(s);
+    using S = glm::ChatController::State;
+    const bool generating = (s == S::Sending || s == S::Streaming);
+    m_sendBtn->setText(generating ? tr("停止") : tr("发送"));
+    m_inputEdit->setEnabled(!generating);
+
+    QString status;
+    switch (s) {
+    case S::Idle:     status = tr("就绪"); break;
+    case S::Sending:  status = tr("发送中..."); break;
+    case S::Streaming:status = tr("生成中..."); break;
+    case S::Finished: status = tr("完成"); break;
+    case S::Error:    status = tr("出错"); break;
+    case S::Aborted:  status = tr("已中断"); break;
+    }
+    m_statusLabel->setText(status);
+}
+
+void MainWindow::onErrorOccurred(const QString &error)
+{
+    m_statusLabel->setText(tr("错误: ") + error);
 }
 
 void MainWindow::updateButtonByState(glm::ChatController::State s)
@@ -98,5 +105,4 @@ void MainWindow::updateButtonByState(glm::ChatController::State s)
     const bool generating = (s == S::Sending || s == S::Streaming);
     m_sendBtn->setText(generating ? tr("停止") : tr("发送"));
     m_sendBtn->setEnabled(true);
-    m_inputEdit->setEnabled(!generating);   // 生成中禁输入,防乱
 }

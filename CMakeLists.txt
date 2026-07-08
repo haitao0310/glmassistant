@@ -15,6 +15,8 @@ qt_standard_project_setup()
 qt_add_executable(GlmAssistant
     main.cpp
     src/app/ChatController.cpp src/app/ChatController.h
+    src/app/ChatModel.cpp src/app/ChatModel.h
+    src/ui/ParamPanel.cpp src/ui/ParamPanel.h
     src/core/LlmTypes.cpp src/core/LlmTypes.h src/core/LlmReply.h src/core/ILlmProvider.h
     src/network/HttpClient.cpp src/network/HttpClient.h src/network/SseParser.cpp src/network/SseParser.h
     src/providers/GlmProvider.cpp src/providers/GlmProvider.h

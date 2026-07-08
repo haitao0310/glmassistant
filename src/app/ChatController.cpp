@@ -16,62 +16,93 @@ void ChatController::send(const QString &userText)
 {
     if (m_state != State::Idle) {
         logWarning("chat", QStringLiteral("send ignored: not idle"));
-        return;   // 状态机守卫,防重复点
-    }
-    if (!m_provider) {
-        emit errorOccurred(QStringLiteral("未配置 Provider"));
         return;
     }
+    if (!m_provider) { emit errorOccurred(QStringLiteral("未配置 Provider")); return; }
 
-    // P1:单轮(只发当前 userText);P2 扩多轮 messages 列表
+    // 用户消息入历史(P2 多轮)
+    Message userMsg;
+    userMsg.role = Role::User;
+    userMsg.content = userText;
+    userMsg.timestamp = QDateTime::currentMSecsSinceEpoch();
+    m_messages.append(userMsg);
+    emit messageAppended(userMsg);
+
+    // 构造请求:完整历史 + 当前参数
     LlmRequest req;
-    req.model = QStringLiteral("glm-4-flash");   // TODO P2 从 Settings 读
+    req.model = m_params.model;
+    req.messages = m_messages;
+    req.temperature = m_params.temperature;
+    req.topP = m_params.topP;
+    req.maxTokens = m_params.maxTokens;
     req.stream = true;
-    Message m;
-    m.role = Role::User;
-    m.content = userText;
-    m.timestamp = QDateTime::currentMSecsSinceEpoch();
-    req.messages.append(m);
 
     setState(State::Sending);
 
+    // 预占 assistant 消息(流式 chunk 填充)
+    Message asstMsg;
+    asstMsg.role = Role::Assistant;
+    asstMsg.timestamp = QDateTime::currentMSecsSinceEpoch();
+    m_messages.append(asstMsg);
+    emit messageAppended(asstMsg);
+
     m_currentReply = m_provider->send(req);
-    m_currentReply->setParent(this);   // 接管:Controller 析构时 reply 跟随
+    m_currentReply->setParent(this);
     connectReply(m_currentReply);
 }
 
 void ChatController::stop()
 {
     if (m_state != State::Sending && m_state != State::Streaming) return;
-    setState(State::Aborted);                            // 先切 Aborted(后续 error/finished 据此忽略)
-    if (m_currentReply) m_currentReply->abort();         // → resp.error(Canceled)+finished → done
+    setState(State::Aborted);
+    if (m_currentReply) m_currentReply->abort();
+}
+
+void ChatController::clearHistory()
+{
+    if (m_currentReply) m_currentReply->abort();
+    m_messages.clear();
+    setState(State::Idle);
+}
+
+void ChatController::setParams(const GenerationParams &p)
+{
+    m_params = p;
+    logDebug("chat", QStringLiteral("params: model=%1 temp=%2").arg(p.model).arg(p.temperature));
 }
 
 void ChatController::connectReply(LlmReply *reply)
 {
     QObject::connect(reply, &LlmReply::chunkReceived, this, [this](const QString &text) {
-        if (m_state == State::Sending) setState(State::Streaming);   // 首块 → Streaming
+        if (m_state == State::Sending) setState(State::Streaming);
+        if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant) {
+            m_messages.last().content += text;   // 累积到历史(下次请求带正确 assistant 回复)
+        }
         emit chunkReceived(text);
     });
 
     QObject::connect(reply, &LlmReply::finished, this, [this](const QString &fullText) {
-        if (m_state == State::Aborted) return;   // 主动中断,保持 Aborted
+        if (m_state == State::Aborted) return;
+        if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant) {
+            m_messages.last().content = fullText;   // 全量覆盖保历史准
+        }
         setState(State::Finished);
         emit finished(fullText);
     });
 
     QObject::connect(reply, &LlmReply::errorOccurred, this, [this](const QString &err) {
-        if (m_state == State::Aborted) return;   // abort 触发的 OperationCanceled,忽略
+        if (m_state == State::Aborted) return;
+        // 错误回滚预占的空 assistant
+        if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant
+            && m_messages.last().content.isEmpty()) {
+            m_messages.removeLast();
+        }
         setState(State::Error);
         emit errorOccurred(err);
     });
 
-    // 终态统一清理(finished/error 后 LlmReply 都发 done)
     QObject::connect(reply, &LlmReply::done, this, [this]() {
-        if (m_currentReply) {
-            m_currentReply->deleteLater();
-            m_currentReply = nullptr;
-        }
+        if (m_currentReply) { m_currentReply->deleteLater(); m_currentReply = nullptr; }
     });
 }
 

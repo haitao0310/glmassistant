@@ -40,6 +40,14 @@ struct LlmRequest {
     bool stream = false;    // P1 起默认 true(SSE)
 };
 
+// 生成参数(UI 层集合,ParamPanel 持,构造 LlmRequest 时填入)
+struct GenerationParams {
+    QString model = QStringLiteral("glm-4-flash");
+    qreal temperature = 0.7;
+    qreal topP = 1.0;
+    int maxTokens = 2048;
+};
+
 } // namespace glm
 
 #endif // GLM_LLM_TYPES_H
