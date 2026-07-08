@@ -2,32 +2,53 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include "glmclient.h"
+#include "src/app/ChatController.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
+
+namespace glm { class SessionManager; class ParamPanel; class DebugController; class DebugView; }
+class QListWidget;
+class QTextBrowser;
+class QTabWidget;
+class QLabel;
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    MainWindow(glm::ChatController *controller, glm::SessionManager *sessions,
+               glm::DebugController *debug, QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
-    void onSendClicked();                         //点发送按钮
-    void onReplyReceived(const QString &content); //收到 GLM 回复
-    void onErrorOccurred(const QString &error);   //网络/解析出错
+    void onSendClicked();
+    void onStateChanged(glm::ChatController::State s);
+    void onErrorOccurred(const QString &error);
+    void refreshSessionList();
+    void onCurrentSessionChanged(const QString &id);
 
 private:
     Ui::MainWindow *ui;
-    GlmClient *m_glm = nullptr;
-    //第一步手写控件(后面模块化时拆到独立 ChatWidget)
+    glm::ChatController *m_controller;
+    glm::SessionManager *m_sessions;
+    glm::ParamPanel *m_paramPanel;
+    glm::DebugView *m_debugView;
+    class QTabWidget *m_tabs;
+    class QListWidget *m_sessionList;
+    class QTextBrowser *m_chatView;
     class QTextEdit *m_inputEdit;
-    class QTextEdit *m_outputEdit;
     class QPushButton *m_sendBtn;
+    class QPushButton *m_newSessionBtn;
+    class QPushButton *m_delSessionBtn;
+    class QPushButton *m_themeBtn;
+    class QLabel *m_statusLabel;
+
+    QWidget *buildChatTab();   // 构建对话 tab 内容
+    void rerenderChat();
+    void updateButtonByState(glm::ChatController::State s);
 };
 
 #endif // MAINWINDOW_H

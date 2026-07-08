@@ -1,80 +1,186 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include "src/app/SessionManager.h"
+#include "src/ui/ParamPanel.h"
+#include "src/ui/DebugView.h"
+#include "src/infrastructure/ThemeManager.h"
+
+#include <QTabWidget>
+#include <QListWidget>
+#include <QTextBrowser>
 #include <QTextEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QTextCursor>
 
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(glm::ChatController *controller, glm::SessionManager *sessions,
+                       glm::DebugController *debug, QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , m_controller(controller)
+    , m_sessions(sessions)
 {
     ui->setupUi(this);
-    setWindowTitle(QStringLiteral("GlmAssistant - 第一步 调通 API"));
+    setWindowTitle(tr("GlmAssistant - P4 对话 + 调试双模式"));
 
-    //第一步:手写中央 UI(后面模块化时拆到独立 ChatWidget)
-    auto *central = new QWidget(this);
-    auto *layout = new QVBoxLayout(central);
+    m_paramPanel = new glm::ParamPanel(this);
+    m_debugView = new glm::DebugView(debug, this);
+    m_tabs = new QTabWidget(this);
+    m_tabs->addTab(buildChatTab(), tr("对话"));
+    m_tabs->addTab(m_debugView, tr("调试"));
+    setCentralWidget(m_tabs);
 
-    m_inputEdit = new QTextEdit;
-    m_inputEdit->setPlaceholderText(QStringLiteral("输入消息..."));
-    m_outputEdit = new QTextEdit;
-    m_outputEdit->setPlaceholderText(QStringLiteral("GLM 回复显示在这里..."));
-    m_outputEdit->setReadOnly(true);
-    m_sendBtn = new QPushButton(QStringLiteral("发送"));
+    // Controller → UI
+    connect(m_controller, &glm::ChatController::messageAppended, this, [this](const glm::Message &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::chunkReceived, this, [this](const QString &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::historyReplaced, this, [this](const QList<glm::Message> &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::stateChanged, this, &MainWindow::onStateChanged);
+    connect(m_controller, &glm::ChatController::errorOccurred, this, &MainWindow::onErrorOccurred);
 
-    layout->addWidget(new QLabel(QStringLiteral("输入:")));
-    layout->addWidget(m_inputEdit);
-    layout->addWidget(m_sendBtn);
-    layout->addWidget(new QLabel(QStringLiteral("回复:")));
-    layout->addWidget(m_outputEdit);
+    connect(m_paramPanel, &glm::ParamPanel::paramsChanged, m_controller, &glm::ChatController::setParams);
+    m_controller->setParams(m_paramPanel->params());
 
-    setCentralWidget(central);
+    connect(m_sessions, &glm::SessionManager::sessionListChanged, this, &MainWindow::refreshSessionList);
+    connect(m_sessions, &glm::SessionManager::currentChanged, this, &MainWindow::onCurrentSessionChanged);
+    connect(m_sessions, &glm::SessionManager::messagesLoaded, m_controller, &glm::ChatController::setSession);
 
-    //=== API Key:从环境变量读(不硬编码,防随代码进 git 泄露)===
-    //设法:Qt Creator → 左侧 Projects → Run → Run Environment → 添加 GLM_API_KEY=你的key
-    //或 Windows 系统环境变量新建 GLM_API_KEY(改后重启 Qt Creator)
-    const QByteArray envKey = qgetenv("GLM_API_KEY");
-    if (envKey.isEmpty()) {
-        m_outputEdit->append(QStringLiteral("[配置错误] 未设置环境变量 GLM_API_KEY"));
-        m_outputEdit->append(QStringLiteral("  Qt Creator: Projects → Run → Run Environment → 添加 GLM_API_KEY=你的key"));
-        m_outputEdit->append(QStringLiteral("  或 Windows 系统环境变量新建 GLM_API_KEY(改后重启 Qt Creator)"));
-        m_sendBtn->setEnabled(false);
-    } else {
-        m_glm = new GlmClient(QString::fromLocal8Bit(envKey), this);
-        connect(m_glm, &GlmClient::replyReceived, this, &MainWindow::onReplyReceived);
-        connect(m_glm, &GlmClient::errorOccurred, this, &MainWindow::onErrorOccurred);
-    }
-    connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
+    refreshSessionList();
+    rerenderChat();
+    updateButtonByState(m_controller->state());
 }
 
-MainWindow::~MainWindow()
+QWidget *MainWindow::buildChatTab()
 {
-    delete ui;
+    m_sessionList = new QListWidget;
+    m_chatView = new QTextBrowser;
+    m_chatView->setOpenExternalLinks(true);
+    m_inputEdit = new QTextEdit;
+    m_inputEdit->setMaximumHeight(80);
+    m_inputEdit->setPlaceholderText(tr("输入消息..."));
+    m_sendBtn = new QPushButton(tr("发送"));
+    m_newSessionBtn = new QPushButton(tr("新建会话"));
+    m_delSessionBtn = new QPushButton(tr("删除"));
+    m_themeBtn = new QPushButton(tr("切换主题"));
+    m_statusLabel = new QLabel(tr("就绪"));
+
+    auto *chatWidget = new QWidget;
+    auto *outer = new QHBoxLayout(chatWidget);
+
+    auto *left = new QVBoxLayout;
+    left->addWidget(new QLabel(tr("会话")));
+    left->addWidget(m_sessionList);
+    left->addWidget(m_newSessionBtn);
+    left->addWidget(m_delSessionBtn);
+    outer->addLayout(left);
+
+    auto *center = new QVBoxLayout;
+    center->addWidget(m_chatView, 1);
+    center->addWidget(m_inputEdit);
+    auto *btnRow = new QHBoxLayout;
+    btnRow->addWidget(m_themeBtn);
+    btnRow->addWidget(m_statusLabel);
+    btnRow->addStretch();
+    btnRow->addWidget(m_sendBtn);
+    center->addLayout(btnRow);
+    outer->addLayout(center, 1);
+
+    outer->addWidget(m_paramPanel);
+
+    connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
+    connect(m_newSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->newSession(); });
+    connect(m_delSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->deleteCurrent(); });
+    connect(m_themeBtn, &QPushButton::clicked, this, [this]{
+        const auto next = (glm::ThemeManager::current() == glm::ThemeManager::Theme::Light)
+                          ? glm::ThemeManager::Theme::Dark : glm::ThemeManager::Theme::Light;
+        glm::ThemeManager::apply(next, qApp);
+    });
+    connect(m_sessionList, &QListWidget::currentRowChanged, this, [this](int row){
+        const auto ss = m_sessions->sessions();
+        if (row >= 0 && row < ss.size()) m_sessions->switchTo(ss.at(row).id);
+    });
+
+    return chatWidget;
 }
+
+MainWindow::~MainWindow() { delete ui; }
 
 void MainWindow::onSendClicked()
 {
-    if (!m_glm) return;   //key 未配置时 m_glm 为空,防崩溃
+    using S = glm::ChatController::State;
+    const auto st = m_controller->state();
+    if (st == S::Sending || st == S::Streaming) { m_controller->stop(); return; }
     const QString text = m_inputEdit->toPlainText().trimmed();
-    if(text.isEmpty()) return;
-
-    m_outputEdit->append(QStringLiteral("我: ") + text);
+    if (text.isEmpty()) return;
     m_inputEdit->clear();
-    m_sendBtn->setEnabled(false);   //等回复期间禁用,防重复点
-    m_glm->sendMessage(text);
+    m_controller->send(text);
 }
 
-void MainWindow::onReplyReceived(const QString &content)
+void MainWindow::onStateChanged(glm::ChatController::State s)
 {
-    m_outputEdit->append(QStringLiteral("GLM: ") + content + QStringLiteral("\n"));
-    m_sendBtn->setEnabled(true);
+    using S = glm::ChatController::State;
+    m_inputEdit->setEnabled(!(s == S::Sending || s == S::Streaming));
+    QString status;
+    switch (s) {
+    case S::Idle:     status = tr("就绪"); break;
+    case S::Sending:  status = tr("发送中..."); break;
+    case S::Streaming:status = tr("生成中..."); break;
+    case S::Finished: status = tr("完成"); break;
+    case S::Error:    status = tr("出错"); break;
+    case S::Aborted:  status = tr("已中断"); break;
+    }
+    m_statusLabel->setText(status);
+    updateButtonByState(s);
 }
 
 void MainWindow::onErrorOccurred(const QString &error)
 {
-    m_outputEdit->append(QStringLiteral("[错误] ") + error);
+    m_statusLabel->setText(tr("错误: ") + error);
+}
+
+void MainWindow::refreshSessionList()
+{
+    m_sessionList->blockSignals(true);
+    m_sessionList->clear();
+    const auto ss = m_sessions->sessions();
+    const QString cur = m_sessions->currentSessionId();
+    int curRow = -1;
+    for (int i = 0; i < ss.size(); ++i) {
+        m_sessionList->addItem(ss.at(i).title.isEmpty() ? tr("(无标题)") : ss.at(i).title);
+        if (ss.at(i).id == cur) curRow = i;
+    }
+    if (curRow >= 0) m_sessionList->setCurrentRow(curRow);
+    m_sessionList->blockSignals(false);
+}
+
+void MainWindow::onCurrentSessionChanged(const QString &id)
+{
+    Q_UNUSED(id);
+    refreshSessionList();
+}
+
+void MainWindow::rerenderChat()
+{
+    const auto hist = m_controller->history();
+    QString md;
+    for (const auto &m : hist) {
+        if (m.role == glm::Role::User) {
+            md += QStringLiteral("**我:** ") + m.content + QStringLiteral("\n\n");
+        } else if (m.role == glm::Role::Assistant) {
+            md += QStringLiteral("**GLM:** ") + m.content + QStringLiteral("\n\n");
+        }
+    }
+    m_chatView->setMarkdown(md);
+    m_chatView->moveCursor(QTextCursor::End);
+}
+
+void MainWindow::updateButtonByState(glm::ChatController::State s)
+{
+    using S = glm::ChatController::State;
+    const bool gen = (s == S::Sending || s == S::Streaming);
+    m_sendBtn->setText(gen ? tr("停止") : tr("发送"));
     m_sendBtn->setEnabled(true);
 }
