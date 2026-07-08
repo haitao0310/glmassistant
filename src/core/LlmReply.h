@@ -3,11 +3,12 @@
 
 #include <QObject>
 #include <QString>
+#include <QByteArray>
 #include <functional>
 
 namespace glm {
 
-// 异步请求的统一返回对象(ADR-003)。
+// 异步请求的统一返回对象(ADR-003)。P4 加 rawRequest/rawResponse(调试模式)。
 //
 // Provider 通过 emitXxx 推进度;调用方 connect 信号拿结果。
 //   流式: 多次 chunkReceived → 1 次 finished
@@ -28,11 +29,15 @@ public:
     void emitFinished(const QString &fullText) { emit finished(fullText); emit done(); }
     void emitError(const QString &error) { emit errorOccurred(error); emit done(); }
 
-    // 中断:Provider 在 send() 时 setAbortHandle(如 [resp]{ resp->abort(); }),
-    //      调用方 stop() 时调 abort() 触发底层中断。
-    //      中断后 Provider 应回调 emitError/emitFinished(发 done 促清理)。
+    // 中断:Provider 在 send() 时 setAbortHandle,调用方 stop() 时 abort()
     void setAbortHandle(std::function<void()> aborter) { m_aborter = std::move(aborter); }
     void abort() { if (m_aborter) m_aborter(); }
+
+    // P4 调试:原始请求/响应(GlmProvider 填)
+    void setRawRequest(const QString &r) { m_rawRequest = r; }
+    QString rawRequest() const { return m_rawRequest; }
+    void appendRawResponse(const QByteArray &chunk) { m_rawResponse += QString::fromUtf8(chunk); }
+    QString rawResponse() const { return m_rawResponse; }
 
 signals:
     void chunkReceived(const QString &text);    // 流式增量
@@ -42,6 +47,8 @@ signals:
 
 private:
     std::function<void()> m_aborter;
+    QString m_rawRequest;
+    QString m_rawResponse;
 };
 
 } // namespace glm

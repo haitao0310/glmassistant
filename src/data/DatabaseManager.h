@@ -31,6 +31,12 @@ public:
     bool updateLastMessageContent(const QString &sessionId, const QString &content);  // 流式更新末条
     bool clearMessages(const QString &sessionId);
 
+    // === 调试请求 CRUD(P4 历史库) ===
+    int createRequest(const RequestRecord &r);                       // 存请求记录,返回 id
+    QList<RequestRecord> requests(const QString &sessionId = {});    // 全部或按会话
+    bool updateRequestResponse(int id, const QString &rawResponse);  // 响应回填(流式完成)
+    bool deleteRequest(int id);
+
 private:
     DatabaseManager();
     bool ensureSchema();   // 建表 + 版本迁移(防玩具 DoD:可演进)

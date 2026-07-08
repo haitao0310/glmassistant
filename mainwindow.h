@@ -8,9 +8,10 @@ QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
-namespace glm { class SessionManager; class ParamPanel; }
+namespace glm { class SessionManager; class ParamPanel; class DebugController; class DebugView; }
 class QListWidget;
 class QTextBrowser;
+class QTabWidget;
 class QLabel;
 
 class MainWindow : public QMainWindow
@@ -18,7 +19,8 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(glm::ChatController *controller, glm::SessionManager *sessions, QWidget *parent = nullptr);
+    MainWindow(glm::ChatController *controller, glm::SessionManager *sessions,
+               glm::DebugController *debug, QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
@@ -33,6 +35,8 @@ private:
     glm::ChatController *m_controller;
     glm::SessionManager *m_sessions;
     glm::ParamPanel *m_paramPanel;
+    glm::DebugView *m_debugView;
+    class QTabWidget *m_tabs;
     class QListWidget *m_sessionList;
     class QTextBrowser *m_chatView;
     class QTextEdit *m_inputEdit;
@@ -42,7 +46,8 @@ private:
     class QPushButton *m_themeBtn;
     class QLabel *m_statusLabel;
 
-    void rerenderChat();   // 全量 md 渲染
+    QWidget *buildChatTab();   // 构建对话 tab 内容
+    void rerenderChat();
     void updateButtonByState(glm::ChatController::State s);
 };
 

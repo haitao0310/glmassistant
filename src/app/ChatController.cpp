@@ -1,6 +1,7 @@
 #include "ChatController.h"
 
 #include "../app/SessionManager.h"
+#include "../app/DebugController.h"
 #include "../data/DatabaseManager.h"
 #include "../infrastructure/Logger.h"
 
@@ -8,10 +9,12 @@
 
 namespace glm {
 
-ChatController::ChatController(ILlmProvider *provider, SessionManager *sessions, QObject *parent)
+ChatController::ChatController(ILlmProvider *provider, SessionManager *sessions,
+                               DebugController *debug, QObject *parent)
     : QObject(parent)
     , m_provider(provider)
     , m_sessions(sessions)
+    , m_debug(debug)
 {
 }
 
@@ -29,6 +32,21 @@ void ChatController::persistUpdateLast(const QString &content)
     if (!sid.isEmpty()) DatabaseManager::instance().updateLastMessageContent(sid, content);
 }
 
+void ChatController::recordDebug(LlmReply *reply)
+{
+    if (!m_debug || !reply) return;
+    RequestRecord r;
+    r.sessionId = m_sessions ? m_sessions->currentSessionId() : QString();
+    r.model = m_params.model;
+    r.temperature = m_params.temperature;
+    r.topP = m_params.topP;
+    r.maxTokens = m_params.maxTokens;
+    r.rawRequest = reply->rawRequest();
+    r.rawResponse = reply->rawResponse();
+    r.timestamp = QDateTime::currentMSecsSinceEpoch();
+    m_debug->record(r);
+}
+
 void ChatController::send(const QString &userText)
 {
     if (m_state != State::Idle) {
@@ -37,7 +55,6 @@ void ChatController::send(const QString &userText)
     }
     if (!m_provider) { emit errorOccurred(QStringLiteral("未配置 Provider")); return; }
 
-    // 用户消息入历史(内存 + DB)
     Message userMsg;
     userMsg.role = Role::User;
     userMsg.content = userText;
@@ -56,7 +73,6 @@ void ChatController::send(const QString &userText)
 
     setState(State::Sending);
 
-    // 预占 assistant(内存 + DB)
     Message asstMsg;
     asstMsg.role = Role::Assistant;
     asstMsg.timestamp = QDateTime::currentMSecsSinceEpoch();
@@ -94,7 +110,7 @@ void ChatController::setSession(const QList<Message> &msgs)
     if (m_currentReply) m_currentReply->abort();
     m_messages = msgs;
     setState(State::Idle);
-    emit historyReplaced(msgs);   // UI 重建 ChatModel
+    emit historyReplaced(msgs);
 }
 
 void ChatController::connectReply(LlmReply *reply)
@@ -103,17 +119,18 @@ void ChatController::connectReply(LlmReply *reply)
         if (m_state == State::Sending) setState(State::Streaming);
         if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant) {
             m_messages.last().content += text;
-            persistUpdateLast(m_messages.last().content);   // DB 流式更新
+            persistUpdateLast(m_messages.last().content);
         }
         emit chunkReceived(text);
     });
 
-    QObject::connect(reply, &LlmReply::finished, this, [this](const QString &fullText) {
+    QObject::connect(reply, &LlmReply::finished, this, [this, reply](const QString &fullText) {
         if (m_state == State::Aborted) return;
         if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant) {
             m_messages.last().content = fullText;
-            persistUpdateLast(fullText);   // DB 全量
+            persistUpdateLast(fullText);
         }
+        recordDebug(reply);   // P4:记录请求/响应到调试库
         setState(State::Finished);
         emit finished(fullText);
     });
@@ -123,7 +140,6 @@ void ChatController::connectReply(LlmReply *reply)
         if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant
             && m_messages.last().content.isEmpty()) {
             m_messages.removeLast();
-            // DB 末条留空 assistant(TODO:清理空行,或改 deleteLastMessage)
         }
         setState(State::Error);
         emit errorOccurred(err);

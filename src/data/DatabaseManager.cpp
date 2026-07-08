@@ -67,7 +67,16 @@ bool DatabaseManager::ensureSchema()
         exec(QStringLiteral("INSERT INTO schema_version(version) VALUES(1)"));
         logInfo("db", QStringLiteral("schema v1 created"));
     }
-    // 后续 v2/v3 迁移:if (version < 2) { ... }
+
+    // v2: 调试请求历史库(P4)
+    if (version < 2) {
+        exec(QStringLiteral("CREATE TABLE IF NOT EXISTS requests ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, model TEXT, "
+            "temperature REAL, top_p REAL, max_tokens INTEGER, "
+            "raw_request TEXT, raw_response TEXT, timestamp INTEGER)"));
+        exec(QStringLiteral("INSERT INTO schema_version(version) VALUES(2)"));
+        logInfo("db", QStringLiteral("schema v2 created (requests table)"));
+    }
     return true;
 }
 
@@ -173,6 +182,69 @@ bool DatabaseManager::clearMessages(const QString &sessionId)
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral("DELETE FROM messages WHERE session_id=?"));
     q.addBindValue(sessionId);
+    return q.exec();
+}
+
+int DatabaseManager::createRequest(const RequestRecord &r)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("INSERT INTO requests(session_id, model, temperature, top_p, max_tokens, raw_request, raw_response, timestamp) "
+        "VALUES(?,?,?,?,?,?,?,?)"));
+    q.addBindValue(r.sessionId);
+    q.addBindValue(r.model);
+    q.addBindValue(r.temperature);
+    q.addBindValue(r.topP);
+    q.addBindValue(r.maxTokens);
+    q.addBindValue(r.rawRequest);
+    q.addBindValue(r.rawResponse);
+    q.addBindValue(r.timestamp);
+    if (!q.exec()) { logError("db", "createRequest: " + q.lastError().text()); return -1; }
+    return q.lastInsertId().toInt();
+}
+
+QList<RequestRecord> DatabaseManager::requests(const QString &sessionId)
+{
+    QList<RequestRecord> result;
+    QSqlQuery q(m_db);
+    if (sessionId.isEmpty()) {
+        q.exec(QStringLiteral("SELECT id, session_id, model, temperature, top_p, max_tokens, raw_request, raw_response, timestamp "
+            "FROM requests ORDER BY id DESC"));
+    } else {
+        q.prepare(QStringLiteral("SELECT id, session_id, model, temperature, top_p, max_tokens, raw_request, raw_response, timestamp "
+            "FROM requests WHERE session_id=? ORDER BY id DESC"));
+        q.addBindValue(sessionId);
+        q.exec();
+    }
+    while (q.next()) {
+        RequestRecord r;
+        r.id = q.value(0).toInt();
+        r.sessionId = q.value(1).toString();
+        r.model = q.value(2).toString();
+        r.temperature = q.value(3).toDouble();
+        r.topP = q.value(4).toDouble();
+        r.maxTokens = q.value(5).toInt();
+        r.rawRequest = q.value(6).toString();
+        r.rawResponse = q.value(7).toString();
+        r.timestamp = q.value(8).toLongLong();
+        result.append(r);
+    }
+    return result;
+}
+
+bool DatabaseManager::updateRequestResponse(int id, const QString &rawResponse)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("UPDATE requests SET raw_response=? WHERE id=?"));
+    q.addBindValue(rawResponse);
+    q.addBindValue(id);
+    return q.exec();
+}
+
+bool DatabaseManager::deleteRequest(int id)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("DELETE FROM requests WHERE id=?"));
+    q.addBindValue(id);
     return q.exec();
 }
 

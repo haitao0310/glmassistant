@@ -12,6 +12,7 @@ qt_add_executable(GlmAssistant
     src/app/ChatController.cpp src/app/ChatController.h
     src/app/ChatModel.cpp src/app/ChatModel.h
     src/app/SessionManager.cpp src/app/SessionManager.h
+    src/app/DebugController.cpp src/app/DebugController.h
     src/core/LlmTypes.cpp src/core/LlmTypes.h src/core/LlmReply.h src/core/ILlmProvider.h
     src/data/DatabaseManager.cpp src/data/DatabaseManager.h
     src/network/HttpClient.cpp src/network/HttpClient.h src/network/SseParser.cpp src/network/SseParser.h
@@ -19,6 +20,7 @@ qt_add_executable(GlmAssistant
     src/infrastructure/Logger.cpp src/infrastructure/Logger.h src/infrastructure/Constants.h src/infrastructure/Error.h
     src/infrastructure/ThemeManager.cpp src/infrastructure/ThemeManager.h
     src/ui/ParamPanel.cpp src/ui/ParamPanel.h
+    src/ui/DebugView.cpp src/ui/DebugView.h
     src/ui/MarkdownRenderer.cpp src/ui/MarkdownRenderer.h
     mainwindow.cpp mainwindow.h mainwindow.ui
 )

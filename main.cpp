@@ -6,6 +6,7 @@
 #include "src/providers/GlmProvider.h"
 #include "src/app/ChatController.h"
 #include "src/app/SessionManager.h"
+#include "src/app/DebugController.h"
 #include "src/data/DatabaseManager.h"
 
 #include <QApplication>
@@ -28,20 +29,21 @@ int main(int argc, char *argv[])
         glm::logError("main", QStringLiteral("DB open failed: %1").arg(dbPath));
     }
 
-    // API key 从环境变量(不进代码,防泄露)
+    // API key 从环境变量
     const QByteArray apiKey = qgetenv(glm::constants::GLM_API_ENV_KEY);
     if (apiKey.isEmpty()) {
         glm::logError("main", QStringLiteral("%1 未设置,窗口内会提示")
                           .arg(QString::fromUtf8(glm::constants::GLM_API_ENV_KEY)));
     }
 
-    // 依赖组装(ADR-008)
+    // 依赖组装(ADR-008):Http → Provider → Session → Debug → Controller → MainWindow
     auto *http = new glm::HttpClient(&a);
     auto *provider = new glm::GlmProvider(QString::fromLocal8Bit(apiKey), http, &a);
     auto *sessions = new glm::SessionManager(&a);
-    auto *controller = new glm::ChatController(provider, sessions, &a);
+    auto *debug = new glm::DebugController(provider, sessions, &a);
+    auto *controller = new glm::ChatController(provider, sessions, debug, &a);
 
-    MainWindow w(controller, sessions);
+    MainWindow w(controller, sessions, debug);
     w.show();
     return a.exec();
 }

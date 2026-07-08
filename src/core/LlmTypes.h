@@ -48,6 +48,19 @@ struct GenerationParams {
     int maxTokens = 2048;
 };
 
+// 调试请求记录(P4 调试模式历史库:每次请求的原始 body + 响应 + 参数)
+struct RequestRecord {
+    int id = 0;
+    QString sessionId;
+    QString model;
+    qreal temperature = 0.7;
+    qreal topP = 1.0;
+    int maxTokens = 2048;
+    QString rawRequest;     // 发出的 OpenAI 兼容 JSON body
+    QString rawResponse;    // 收到的原始响应(流式累积或整体)
+    qint64 timestamp = 0;
+};
+
 } // namespace glm
 
 #endif // GLM_LLM_TYPES_H

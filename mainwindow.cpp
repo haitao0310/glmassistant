@@ -3,8 +3,10 @@
 
 #include "src/app/SessionManager.h"
 #include "src/ui/ParamPanel.h"
+#include "src/ui/DebugView.h"
 #include "src/infrastructure/ThemeManager.h"
 
+#include <QTabWidget>
 #include <QListWidget>
 #include <QTextBrowser>
 #include <QTextEdit>
@@ -15,16 +17,44 @@
 #include <QWidget>
 #include <QTextCursor>
 
-MainWindow::MainWindow(glm::ChatController *controller, glm::SessionManager *sessions, QWidget *parent)
+MainWindow::MainWindow(glm::ChatController *controller, glm::SessionManager *sessions,
+                       glm::DebugController *debug, QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , m_controller(controller)
     , m_sessions(sessions)
 {
     ui->setupUi(this);
-    setWindowTitle(tr("GlmAssistant - P3 多会话 + Markdown + 主题"));
+    setWindowTitle(tr("GlmAssistant - P4 对话 + 调试双模式"));
 
     m_paramPanel = new glm::ParamPanel(this);
+    m_debugView = new glm::DebugView(debug, this);
+    m_tabs = new QTabWidget(this);
+    m_tabs->addTab(buildChatTab(), tr("对话"));
+    m_tabs->addTab(m_debugView, tr("调试"));
+    setCentralWidget(m_tabs);
+
+    // Controller → UI
+    connect(m_controller, &glm::ChatController::messageAppended, this, [this](const glm::Message &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::chunkReceived, this, [this](const QString &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::historyReplaced, this, [this](const QList<glm::Message> &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::stateChanged, this, &MainWindow::onStateChanged);
+    connect(m_controller, &glm::ChatController::errorOccurred, this, &MainWindow::onErrorOccurred);
+
+    connect(m_paramPanel, &glm::ParamPanel::paramsChanged, m_controller, &glm::ChatController::setParams);
+    m_controller->setParams(m_paramPanel->params());
+
+    connect(m_sessions, &glm::SessionManager::sessionListChanged, this, &MainWindow::refreshSessionList);
+    connect(m_sessions, &glm::SessionManager::currentChanged, this, &MainWindow::onCurrentSessionChanged);
+    connect(m_sessions, &glm::SessionManager::messagesLoaded, m_controller, &glm::ChatController::setSession);
+
+    refreshSessionList();
+    rerenderChat();
+    updateButtonByState(m_controller->state());
+}
+
+QWidget *MainWindow::buildChatTab()
+{
     m_sessionList = new QListWidget;
     m_chatView = new QTextBrowser;
     m_chatView->setOpenExternalLinks(true);
@@ -37,9 +67,8 @@ MainWindow::MainWindow(glm::ChatController *controller, glm::SessionManager *ses
     m_themeBtn = new QPushButton(tr("切换主题"));
     m_statusLabel = new QLabel(tr("就绪"));
 
-    // 布局:左会话侧栏 | 中(消息+输入) | 右参数
-    auto *central = new QWidget(this);
-    auto *outer = new QHBoxLayout(central);
+    auto *chatWidget = new QWidget;
+    auto *outer = new QHBoxLayout(chatWidget);
 
     auto *left = new QVBoxLayout;
     left->addWidget(new QLabel(tr("会话")));
@@ -60,25 +89,7 @@ MainWindow::MainWindow(glm::ChatController *controller, glm::SessionManager *ses
     outer->addLayout(center, 1);
 
     outer->addWidget(m_paramPanel);
-    setCentralWidget(central);
 
-    // Controller → UI(消息变 → rerenderChat)
-    connect(m_controller, &glm::ChatController::messageAppended, this, [this](const glm::Message &){ rerenderChat(); });
-    connect(m_controller, &glm::ChatController::chunkReceived, this, [this](const QString &){ rerenderChat(); });
-    connect(m_controller, &glm::ChatController::historyReplaced, this, [this](const QList<glm::Message> &){ rerenderChat(); });
-    connect(m_controller, &glm::ChatController::stateChanged, this, &MainWindow::onStateChanged);
-    connect(m_controller, &glm::ChatController::errorOccurred, this, &MainWindow::onErrorOccurred);
-
-    // ParamPanel → Controller
-    connect(m_paramPanel, &glm::ParamPanel::paramsChanged, m_controller, &glm::ChatController::setParams);
-    m_controller->setParams(m_paramPanel->params());
-
-    // SessionManager → 侧栏 + Controller(切换加载历史)
-    connect(m_sessions, &glm::SessionManager::sessionListChanged, this, &MainWindow::refreshSessionList);
-    connect(m_sessions, &glm::SessionManager::currentChanged, this, &MainWindow::onCurrentSessionChanged);
-    connect(m_sessions, &glm::SessionManager::messagesLoaded, m_controller, &glm::ChatController::setSession);
-
-    // 按钮
     connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
     connect(m_newSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->newSession(); });
     connect(m_delSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->deleteCurrent(); });
@@ -92,9 +103,7 @@ MainWindow::MainWindow(glm::ChatController *controller, glm::SessionManager *ses
         if (row >= 0 && row < ss.size()) m_sessions->switchTo(ss.at(row).id);
     });
 
-    refreshSessionList();
-    rerenderChat();
-    updateButtonByState(m_controller->state());
+    return chatWidget;
 }
 
 MainWindow::~MainWindow() { delete ui; }
@@ -134,7 +143,7 @@ void MainWindow::onErrorOccurred(const QString &error)
 
 void MainWindow::refreshSessionList()
 {
-    m_sessionList->blockSignals(true);   // 防 currentRowChanged 递归触发 switchTo
+    m_sessionList->blockSignals(true);
     m_sessionList->clear();
     const auto ss = m_sessions->sessions();
     const QString cur = m_sessions->currentSessionId();
@@ -155,7 +164,6 @@ void MainWindow::onCurrentSessionChanged(const QString &id)
 
 void MainWindow::rerenderChat()
 {
-    // 全量 md 渲染(消息变时重画;P4 可优化增量)
     const auto hist = m_controller->history();
     QString md;
     for (const auto &m : hist) {

@@ -56,6 +56,7 @@ LlmReply *GlmProvider::send(const LlmRequest &req)
     httpReq.headers["Authorization"] = "Bearer " + m_apiKey.toUtf8();
     httpReq.headers["Content-Type"] = "application/json";
     httpReq.body = buildRequestBody(req);
+    reply->setRawRequest(QString::fromUtf8(httpReq.body));   // P4 调试:记录请求 body
     httpReq.stream = req.stream;
 
     HttpResponse *resp = m_http->post(httpReq);
@@ -69,6 +70,7 @@ LlmReply *GlmProvider::send(const LlmRequest &req)
     // 流式增量:SSE 帧 → 增量文本 → chunkReceived
     QObject::connect(resp, &HttpResponse::dataReceived, reply,
         [parser, accumulated, reply](const QByteArray &chunk) {
+            reply->appendRawResponse(chunk);   // P4 调试:累积原始响应
             const QList<QString> payloads = parser->feed(chunk);
             for (const QString &p : payloads) {
                 if (SseParser::isDone(p)) continue;          // 结束标志,等 finished
