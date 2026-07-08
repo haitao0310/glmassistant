@@ -43,6 +43,7 @@ QByteArray GlmProvider::buildRequestBody(const LlmRequest &req) const
     body["temperature"] = req.temperature;
     body["top_p"] = req.topP;
     if (req.maxTokens > 0) body["max_tokens"] = req.maxTokens;
+    if (!req.tools.isEmpty()) body["tools"] = req.tools;   // P5 function calling
 
     return QJsonDocument(body).toJson(QJsonDocument::Compact);
 }
