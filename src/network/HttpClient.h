@@ -55,6 +55,7 @@ public:
 
 private:
     QNetworkAccessManager *m_nam;
+    int m_retryCount = 2;   // 网络层错误重试次数(连接失败/超时重试,HTTP 4xx/5xx 不重试)
 };
 
 } // namespace glm

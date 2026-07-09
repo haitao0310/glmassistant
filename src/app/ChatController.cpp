@@ -78,7 +78,7 @@ void ChatController::send(const QString &userText)
     asstMsg.timestamp = QDateTime::currentMSecsSinceEpoch();
     m_messages.append(asstMsg);
     emit messageAppended(asstMsg);
-    persistMessage(asstMsg);
+    // 不预占插 DB:assistant content 空 → NOT NULL 失败;finished 时插(有内容)
 
     m_currentReply = m_provider->send(req);
     m_currentReply->setParent(this);
@@ -89,12 +89,18 @@ void ChatController::stop()
 {
     if (m_state != State::Sending && m_state != State::Streaming) return;
     setState(State::Aborted);
-    if (m_currentReply) m_currentReply->abort();
+    if (m_currentReply) {
+        m_currentReply->abort();
+        m_currentReply = nullptr;   // 防御:abort 后置空,防异步信号期间访问
+    }
 }
 
 void ChatController::clearHistory()
 {
-    if (m_currentReply) m_currentReply->abort();
+    if (m_currentReply) {
+        m_currentReply->abort();
+        m_currentReply = nullptr;
+    }
     m_messages.clear();
     setState(State::Idle);
 }
@@ -107,7 +113,10 @@ void ChatController::setParams(const GenerationParams &p)
 
 void ChatController::setSession(const QList<Message> &msgs)
 {
-    if (m_currentReply) m_currentReply->abort();
+    if (m_currentReply) {
+        m_currentReply->abort();
+        m_currentReply = nullptr;
+    }
     m_messages = msgs;
     setState(State::Idle);
     emit historyReplaced(msgs);
@@ -119,7 +128,7 @@ void ChatController::connectReply(LlmReply *reply)
         if (m_state == State::Sending) setState(State::Streaming);
         if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant) {
             m_messages.last().content += text;
-            persistUpdateLast(m_messages.last().content);
+            // 流式不每 chunk 写 DB(性能);finished 全量插
         }
         emit chunkReceived(text);
     });
@@ -128,7 +137,7 @@ void ChatController::connectReply(LlmReply *reply)
         if (m_state == State::Aborted) return;
         if (!m_messages.isEmpty() && m_messages.last().role == Role::Assistant) {
             m_messages.last().content = fullText;
-            persistUpdateLast(fullText);
+            persistMessage(m_messages.last());   // finished 插完整 assistant(有 content)
         }
         recordDebug(reply);   // P4:记录请求/响应到调试库
         setState(State::Finished);

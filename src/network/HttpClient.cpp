@@ -5,6 +5,9 @@
 
 #include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QTimer>
+#include <functional>
+#include <memory>
 
 namespace glm {
 
@@ -14,41 +17,62 @@ HttpClient::HttpClient(QObject *parent)
 {
 }
 
+// POST(含网络层重试 + 指数退避;HTTP 4xx/5xx 不重试——是逻辑错)
 HttpResponse *HttpClient::post(const HttpRequest &req)
 {
     auto *response = new HttpResponse(this);   // parent=HttpClient,跟随生命周期
 
-    QNetworkRequest nr(req.url);
-    for (auto it = req.headers.constBegin(); it != req.headers.constEnd(); ++it) {
-        nr.setRawHeader(it.key(), it.value());
-    }
-    nr.setTransferTimeout(constants::HTTP_TIMEOUT_MS);   // Qt 6 超时(防永久挂起)
+    auto attempt = std::make_shared<int>(0);
+    auto doRequest = std::make_shared<std::function<void()>>();
+    auto *nam = m_nam;
+    const int retryCount = m_retryCount;
 
-    QNetworkReply *reply = m_nam->post(nr, req.body);
-    response->setAbortHandle([reply]() { if (reply) reply->abort(); });
+    *doRequest = [nam, req, response, attempt, doRequest, retryCount]() {
+        QNetworkRequest nr(req.url);
+        for (auto it = req.headers.constBegin(); it != req.headers.constEnd(); ++it) {
+            nr.setRawHeader(it.key(), it.value());
+        }
+        nr.setTransferTimeout(constants::HTTP_TIMEOUT_MS);
 
-    // 流式增量:readyRead 时读可读字节喂给 dataReceived(SSE 喂 SseParser)
-    QObject::connect(reply, &QIODevice::readyRead, response, [reply, response]() {
-        const QByteArray chunk = reply->readAll();
-        if (!chunk.isEmpty()) response->emitData(chunk);
-    });
+        QNetworkReply *reply = nam->post(nr, req.body);
+        response->setAbortHandle([reply]() { if (reply) reply->abort(); });
 
-    // 网络错误(含超时):先于 finished 触发
-    QObject::connect(reply, &QNetworkReply::errorOccurred, response,
-        [reply, response](QNetworkReply::NetworkError) {
-            logError("network", reply->errorString());
-            response->emitError(reply->errorString());
+        // 流式增量
+        QObject::connect(reply, &QIODevice::readyRead, response, [reply, response]() {
+            const QByteArray chunk = reply->readAll();
+            if (!chunk.isEmpty()) response->emitData(chunk);
         });
 
-    // 完成(成功/失败最终态)
-    QObject::connect(reply, &QNetworkReply::finished, response, [reply, response]() {
-        response->emitFinished();
-        reply->deleteLater();
-    });
+        // 错误:网络层(httpCode==0,连接/超时)重试;HTTP 4xx/5xx 不重试
+        QObject::connect(reply, &QNetworkReply::errorOccurred, response,
+            [req, response, attempt, doRequest, retryCount, reply](QNetworkReply::NetworkError) {
+                const int httpCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                const QString err = reply->errorString();
+                if (httpCode == 0 && *attempt < retryCount) {
+                    (*attempt)++;
+                    const int delay = 1000 * (1 << (*attempt - 1));   // 指数退避:1s, 2s
+                    logWarning("network", QStringLiteral("网络层错误,%1ms 后重试(%2/%3): %4")
+                                   .arg(delay).arg(*attempt).arg(retryCount).arg(err));
+                    QTimer::singleShot(delay, [doRequest]() { (*doRequest)(); });
+                } else {
+                    const QString msg = httpCode > 0
+                        ? QStringLiteral("HTTP %1: %2").arg(httpCode).arg(err)
+                        : err;
+                    logError("network", msg);
+                    response->emitError(msg);
+                }
+            });
+
+        // 完成(成功/最终失败)。重试时旧 reply 也 finished,调用方靠 done 标志防重复
+        QObject::connect(reply, &QNetworkReply::finished, response, [reply, response]() {
+            response->emitFinished();
+            reply->deleteLater();
+        });
+    };
 
     logInfo("network", QStringLiteral("POST %1 stream=%2 body=%3B")
                 .arg(req.url.toString()).arg(req.stream).arg(req.body.size()));
-
+    (*doRequest)();
     return response;
 }
 

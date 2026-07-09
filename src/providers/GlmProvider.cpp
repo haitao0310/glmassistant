@@ -90,7 +90,19 @@ LlmReply *GlmProvider::send(const LlmRequest &req)
             if (*done) return;
             *done = true;
             logError("glm", QStringLiteral("request error: %1").arg(err));
-            reply->emitError(err);
+            // 友好错误:识别常见场景,给人话 + 解决建议(防玩具 DoD)
+            QString friendly = err;
+            const QString low = err.toLower();
+            if (low.contains("authentication") || low.contains("401")) {
+                friendly = QStringLiteral("API key 错误(401):检查环境变量 GLM_API_KEY 是否设置、bigmodel.cn 的 key 是否有效");
+            } else if (low.contains("timeout") || low.contains("timed out")) {
+                friendly = QStringLiteral("请求超时:检查网络连接后重试");
+            } else if (low.contains("host") && (low.contains("not found") || low.contains("reach"))) {
+                friendly = QStringLiteral("无法连接服务器:检查网络/代理");
+            } else if (low.contains("rate") && low.contains("limit")) {
+                friendly = QStringLiteral("请求过频(限流):稍后重试");
+            }
+            reply->emitError(friendly);
         });
 
     // 完成(成功路径)

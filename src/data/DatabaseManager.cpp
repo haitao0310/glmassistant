@@ -77,6 +77,10 @@ bool DatabaseManager::ensureSchema()
         exec(QStringLiteral("INSERT INTO schema_version(version) VALUES(2)"));
         logInfo("db", QStringLiteral("schema v2 created (requests table)"));
     }
+
+    // C2 索引(性能优化):按会话查消息/请求
+    exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp)"));
+    exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_requests_session ON requests(session_id)"));
     return true;
 }
 
@@ -135,17 +139,19 @@ bool DatabaseManager::deleteSession(const QString &id)
 
 bool DatabaseManager::appendMessage(const QString &sessionId, const Message &m)
 {
+    if (!m_db.transaction()) return false;   // 事务:INSERT + UPDATE 原子(防数据不一致)
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral("INSERT INTO messages(session_id, role, content, timestamp) VALUES(?,?,?,?)"));
     q.addBindValue(sessionId);
     q.addBindValue(m.roleName());
     q.addBindValue(m.content);
     q.addBindValue(m.timestamp);
-    if (!q.exec()) { logError("db", "appendMessage: " + q.lastError().text()); return false; }
+    if (!q.exec()) { logError("db", "appendMessage insert: " + q.lastError().text()); m_db.rollback(); return false; }
     q.prepare(QStringLiteral("UPDATE sessions SET updated_time=? WHERE id=?"));
     q.addBindValue(QDateTime::currentMSecsSinceEpoch());
     q.addBindValue(sessionId);
-    q.exec();
+    if (!q.exec()) { logError("db", "appendMessage update: " + q.lastError().text()); m_db.rollback(); return false; }
+    if (!m_db.commit()) { m_db.rollback(); return false; }
     return true;
 }
 

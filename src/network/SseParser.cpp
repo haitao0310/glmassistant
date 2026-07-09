@@ -1,4 +1,5 @@
 #include "SseParser.h"
+#include "../infrastructure/Logger.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -17,8 +18,9 @@ QList<QString> SseParser::feed(const QByteArray &chunk)
     // 防御:m_buffer 上限 1MB,防服务端发垃圾(无 \n\n)导致内存涨
     constexpr int kMaxBuffer = 1 * 1024 * 1024;
     if (m_buffer.size() > kMaxBuffer) {
+        logError("sse", QStringLiteral("buffer 溢出(>1MB 无 \\n\\n),疑似异常流,已丢弃"));
         m_buffer.clear();
-        return payloads;   // 丢弃,调用方因无输出最终超时/报错
+        return payloads;
     }
 
     // 按双换行切帧

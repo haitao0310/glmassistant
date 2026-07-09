@@ -19,6 +19,7 @@ qt_add_executable(GlmAssistant
     src/network/HttpClient.cpp src/network/HttpClient.h src/network/SseParser.cpp src/network/SseParser.h
     src/providers/GlmProvider.cpp src/providers/GlmProvider.h
     src/providers/OllamaProvider.cpp src/providers/OllamaProvider.h
+    src/providers/CachingProvider.h
     src/infrastructure/Logger.cpp src/infrastructure/Logger.h src/infrastructure/Constants.h src/infrastructure/Error.h
     src/infrastructure/ThemeManager.cpp src/infrastructure/ThemeManager.h
     src/ui/ParamPanel.cpp src/ui/ParamPanel.h
@@ -27,6 +28,7 @@ qt_add_executable(GlmAssistant
     src/agent/ToolRegistry.cpp src/agent/ToolRegistry.h src/agent/ITool.h src/agent/TimeTool.h src/agent/CalculatorTool.h
     src/agent/AgentController.cpp src/agent/AgentController.h
     src/rag/VectorStore.cpp src/rag/VectorStore.h src/rag/IEmbeddingProvider.h src/rag/GlmEmbeddingProvider.cpp src/rag/GlmEmbeddingProvider.h src/rag/RetrievalTool.h
+    src/middleware/MiddlewarePipeline.cpp src/middleware/MiddlewarePipeline.h src/middleware/IMiddleware.h src/middleware/TokenCounterMiddleware.h src/middleware/ContextTruncationMiddleware.h src/middleware/LoggingMiddleware.h
     mainwindow.cpp mainwindow.h mainwindow.ui
 )
 target_include_directories(GlmAssistant PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -36,7 +38,8 @@ target_link_libraries(GlmAssistant PRIVATE Qt6::Widgets Qt6::Network Qt6::Sql Qt
 enable_testing()
 add_executable(tst_sseparser
     tests/tst_sseparser.cpp
-    src/network/SseParser.cpp)
+    src/network/SseParser.cpp
+    src/infrastructure/Logger.cpp)
 target_include_directories(tst_sseparser PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(tst_sseparser PRIVATE Qt6::Test Qt6::Core)
 add_test(NAME tst_sseparser COMMAND tst_sseparser)
