@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <memory>
 
 namespace glm {
@@ -83,7 +84,15 @@ QByteArray serializeOpenAiRequest(const LlmRequest &req, const QString &defaultM
     body["top_p"] = req.topP;
     if (req.maxTokens > 0) body["max_tokens"] = req.maxTokens;
     if (!req.tools.isEmpty()) body["tools"] = req.tools;
-    return QJsonDocument(body).toJson(QJsonDocument::Compact);
+    // GLM 拒浮点精度(0.30000000000000004),格式化 temperature/top_p 到 2 位
+    QString str = QString::fromUtf8(QJsonDocument(body).toJson(QJsonDocument::Compact));
+    str.replace(QRegularExpression(QStringLiteral("\"temperature\":[0-9.eE+-]+")),
+                QStringLiteral("\"temperature\":%1").arg(req.temperature, 0, 'f', 2));
+    str.replace(QRegularExpression(QStringLiteral("\"top_p\":[0-9.eE+-]+")),
+                QStringLiteral("\"top_p\":%1").arg(req.topP, 0, 'f', 2));
+    const QByteArray result = str.toUtf8();
+    logDebug("provider", QStringLiteral("body: %1").arg(QString::fromUtf8(result)));
+    return result;
 }
 
 } // namespace glm

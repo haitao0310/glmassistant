@@ -18,7 +18,7 @@ HttpClient::HttpClient(QObject *parent)
 }
 
 // POST(含网络层重试 + 指数退避;HTTP 4xx/5xx 不重试——是逻辑错)
-HttpResponse *HttpClient::post(const HttpRequest &req)
+HttpResponse* HttpClient::post(const HttpRequest &req)
 {
     auto *response = new HttpResponse(this);   // parent=HttpClient,跟随生命周期
 
@@ -45,23 +45,25 @@ HttpResponse *HttpClient::post(const HttpRequest &req)
 
         // 错误:网络层(httpCode==0,连接/超时)重试;HTTP 4xx/5xx 不重试
         QObject::connect(reply, &QNetworkReply::errorOccurred, response,
-            [req, response, attempt, doRequest, retryCount, reply](QNetworkReply::NetworkError) {
-                const int httpCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-                const QString err = reply->errorString();
-                if (httpCode == 0 && *attempt < retryCount) {
-                    (*attempt)++;
-                    const int delay = 1000 * (1 << (*attempt - 1));   // 指数退避:1s, 2s
-                    logWarning("network", QStringLiteral("网络层错误,%1ms 后重试(%2/%3): %4")
-                                   .arg(delay).arg(*attempt).arg(retryCount).arg(err));
-                    QTimer::singleShot(delay, [doRequest]() { (*doRequest)(); });
-                } else {
-                    const QString msg = httpCode > 0
-                        ? QStringLiteral("HTTP %1: %2").arg(httpCode).arg(err)
-                        : err;
-                    logError("network", msg);
-                    response->emitError(msg);
-                }
-            });
+                         [req, response, attempt, doRequest, retryCount, reply](QNetworkReply::NetworkError) {
+
+                             const int httpCode =
+                                 reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+                             const QString err = reply->errorString();
+
+                             QByteArray body = reply->readAll();
+
+                             logError("network",
+                                      QStringLiteral("HTTP %1\nQtError: %2\nServerBody: %3")
+                                          .arg(httpCode)
+                                          .arg(err)
+                                          .arg(QString::fromUtf8(body)));
+
+                             response->emitError(
+                                 QString::fromUtf8(body)
+                                 );
+                         });
 
         // 完成(成功/最终失败)。重试时旧 reply 也 finished,调用方靠 done 标志防重复
         QObject::connect(reply, &QNetworkReply::finished, response, [reply, response]() {
