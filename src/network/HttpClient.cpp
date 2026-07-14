@@ -60,9 +60,10 @@ HttpResponse* HttpClient::post(const HttpRequest &req)
                                           .arg(err)
                                           .arg(QString::fromUtf8(body)));
 
+                             // 网络错(httpCode==0)无响应体,用 errorString;HTTP 错用 body
                              response->emitError(
-                                 QString::fromUtf8(body)
-                                 );
+                                 body.isEmpty() ? err : QString::fromUtf8(body)
+                             );
                          });
 
         // 完成(成功/最终失败)。重试时旧 reply 也 finished,调用方靠 done 标志防重复
