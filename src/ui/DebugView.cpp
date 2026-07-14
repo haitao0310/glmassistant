@@ -29,7 +29,7 @@ DebugView::DebugView(DebugController *ctrl, QWidget *parent)
     layout->addWidget(m_historyList, 1);
     layout->addWidget(new QLabel(tr("请求 body(可编辑后重放)")));
     layout->addWidget(m_requestView);
-    layout->addWidget(new QLabel(tr("响应(原始)")));
+    layout->addWidget(new QLabel(tr("响应")));
     layout->addWidget(m_responseView);
     layout->addWidget(m_replayBtn);
 
@@ -74,7 +74,13 @@ void DebugView::onReplay()
 
     LlmReply *reply = m_ctrl->replay(r);
     if (!reply) return;
-    QObject::connect(reply, &LlmReply::finished, this, [this](const QString &){ refresh(); });
+    QObject::connect(reply, &LlmReply::finished, this, [this, reply](const QString &fullText){
+        m_responseView->setPlainText(
+            QStringLiteral("【回复】") + fullText +
+            QStringLiteral("\n\n【原始 SSE】\n") + reply->rawResponse()
+        );
+        // 不 refresh():重放请求没记入历史库,refresh 会选中第一条旧记录覆盖重放回复
+    });
     QObject::connect(reply, &LlmReply::errorOccurred, this, [this](const QString &e){
         m_responseView->setPlainText(tr("[重放错误] ") + e);
     });
