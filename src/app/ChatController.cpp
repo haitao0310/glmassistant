@@ -49,8 +49,9 @@ void ChatController::recordDebug(LlmReply *reply)
 
 void ChatController::send(const QString &userText)
 {
-    if (m_state != State::Idle) {
-        logWarning("chat", QStringLiteral("send ignored: not idle"));
+    // 只拒"生成中"(Sending/Streaming),允许终态(Idle/Finished/Error/Aborted)再发新消息
+    if (m_state == State::Sending || m_state == State::Streaming) {
+        logWarning("chat", QStringLiteral("send ignored: 生成中"));
         return;
     }
     if (!m_provider) { emit errorOccurred(QStringLiteral("未配置 Provider")); return; }

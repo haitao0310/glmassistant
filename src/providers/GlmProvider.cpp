@@ -1,15 +1,11 @@
 #include "GlmProvider.h"
 
 #include "../network/HttpClient.h"
-#include "../network/SseParser.h"
+#include "common/ProviderUtils.h"
 #include "../infrastructure/Constants.h"
 #include "../infrastructure/Logger.h"
 
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <QUrl>
-#include <memory>
 
 namespace glm {
 
@@ -25,97 +21,24 @@ QStringList GlmProvider::models() const
     return constants::GLM_MODELS;
 }
 
-// OpenAI 兼容请求体
-QByteArray GlmProvider::buildRequestBody(const LlmRequest &req) const
-{
-    QJsonObject body;
-    body["model"] = req.model.isEmpty() ? constants::GLM_DEFAULT_MODEL : req.model;
-
-    QJsonArray messages;
-    for (const Message &m : req.messages) {
-        QJsonObject mo;
-        mo["role"] = m.roleName();
-        mo["content"] = m.content;
-        messages.append(mo);
-    }
-    body["messages"] = messages;
-    body["stream"] = req.stream;
-    body["temperature"] = req.temperature;
-    body["top_p"] = req.topP;
-    if (req.maxTokens > 0) body["max_tokens"] = req.maxTokens;
-    if (!req.tools.isEmpty()) body["tools"] = req.tools;   // P5 function calling
-
-    return QJsonDocument(body).toJson(QJsonDocument::Compact);
-}
-
 LlmReply *GlmProvider::send(const LlmRequest &req)
 {
-    auto *reply = new LlmReply();   // 调用方(ChatController)接管生命周期
+    auto *reply = new LlmReply();
 
     HttpRequest httpReq;
     httpReq.url = QUrl(constants::GLM_API_ENDPOINT);
     httpReq.headers["Authorization"] = "Bearer " + m_apiKey.toUtf8();
     httpReq.headers["Content-Type"] = "application/json";
-    httpReq.body = buildRequestBody(req);
-    reply->setRawRequest(QString::fromUtf8(httpReq.body));   // P4 调试:记录请求 body
+    httpReq.body = serializeOpenAiRequest(req, constants::GLM_DEFAULT_MODEL);   // 通用序列化(提取)
     httpReq.stream = req.stream;
+    reply->setRawRequest(QString::fromUtf8(httpReq.body));
 
     HttpResponse *resp = m_http->post(httpReq);
-    reply->setAbortHandle([resp]() { resp->abort(); });   // LlmReply.abort → resp.abort → QNetworkReply::abort
-
-    // 解析状态用 shared_ptr 管理(随 reply 的 connect 释放,避免局部引用悬空)
-    auto parser = std::make_shared<SseParser>();
-    auto accumulated = std::make_shared<QString>();
-    auto done = std::make_shared<bool>(false);   // 防 error+finished 重复处理
-
-    // 流式增量:SSE 帧 → 增量文本 → chunkReceived
-    QObject::connect(resp, &HttpResponse::dataReceived, reply,
-        [parser, accumulated, reply](const QByteArray &chunk) {
-            reply->appendRawResponse(chunk);   // P4 调试:累积原始响应
-            const QList<QString> payloads = parser->feed(chunk);
-            for (const QString &p : payloads) {
-                if (SseParser::isDone(p)) continue;          // 结束标志,等 finished
-                const QString text = SseParser::extractDeltaContent(p);
-                if (!text.isEmpty()) {
-                    *accumulated += text;
-                    reply->emitChunk(text);
-                }
-            }
-        });
-
-    // 错误(含超时/abort)。abort 触发 OperationCanceledError,这里统一 emitError,
-    // ChatController.stop() 主动中断时已知是 Aborted,不把这条显示给用户。
-    QObject::connect(resp, &HttpResponse::errorOccurred, reply,
-        [done, reply](const QString &err) {
-            if (*done) return;
-            *done = true;
-            logError("glm", QStringLiteral("request error: %1").arg(err));
-            // 友好错误:识别常见场景,给人话 + 解决建议(防玩具 DoD)
-            QString friendly = err;
-            const QString low = err.toLower();
-            if (low.contains("authentication") || low.contains("401")) {
-                friendly = QStringLiteral("API key 错误(401):检查环境变量 GLM_API_KEY 是否设置、bigmodel.cn 的 key 是否有效");
-            } else if (low.contains("timeout") || low.contains("timed out")) {
-                friendly = QStringLiteral("请求超时:检查网络连接后重试");
-            } else if (low.contains("host") && (low.contains("not found") || low.contains("reach"))) {
-                friendly = QStringLiteral("无法连接服务器:检查网络/代理");
-            } else if (low.contains("rate") && low.contains("limit")) {
-                friendly = QStringLiteral("请求过频(限流):稍后重试");
-            }
-            reply->emitError(friendly);
-        });
-
-    // 完成(成功路径)
-    QObject::connect(resp, &HttpResponse::finished, reply,
-        [done, accumulated, reply]() {
-            if (*done) return;   // error 已处理,跳过(防重复 emitDone)
-            *done = true;
-            reply->emitFinished(*accumulated);
-        });
+    reply->setAbortHandle([resp]() { resp->abort(); });
+    setupSseStreaming(resp, reply);   // 通用 SSE setup(提取,消除与 Ollama 90% 重复)
 
     logInfo("glm", QStringLiteral("send model=%1 stream=%2 msgs=%3")
                 .arg(req.model).arg(req.stream).arg(req.messages.size()));
-
     return reply;
 }
 

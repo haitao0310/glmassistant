@@ -17,6 +17,7 @@ qt_add_executable(GlmAssistant
     src/core/LlmTypes.cpp src/core/LlmTypes.h src/core/LlmReply.h src/core/ILlmProvider.h src/core/ProviderRegistry.cpp src/core/ProviderRegistry.h
     src/data/DatabaseManager.cpp src/data/DatabaseManager.h
     src/network/HttpClient.cpp src/network/HttpClient.h src/network/SseParser.cpp src/network/SseParser.h
+    src/providers/common/ProviderUtils.cpp src/providers/common/ProviderUtils.h
     src/providers/GlmProvider.cpp src/providers/GlmProvider.h
     src/providers/OllamaProvider.cpp src/providers/OllamaProvider.h
     src/providers/CachingProvider.h

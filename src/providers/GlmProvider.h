@@ -24,7 +24,6 @@ public:
     LlmReply *send(const LlmRequest &req) override;
 
 private:
-    QByteArray buildRequestBody(const LlmRequest &req) const;   // OpenAI 兼容 JSON
     QString m_apiKey;
     HttpClient *m_http;
 };

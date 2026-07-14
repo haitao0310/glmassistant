@@ -24,7 +24,6 @@ public:
     LlmReply *send(const LlmRequest &req) override;
 
 private:
-    QByteArray buildRequestBody(const LlmRequest &req) const;
     HttpClient *m_http;
 };
 
