@@ -28,7 +28,7 @@ qt_add_executable(GlmAssistant
     src/ui/MarkdownRenderer.cpp src/ui/MarkdownRenderer.h
     src/agent/ToolRegistry.cpp src/agent/ToolRegistry.h src/agent/ITool.h src/agent/TimeTool.h src/agent/CalculatorTool.h
     src/agent/AgentController.cpp src/agent/AgentController.h
-    src/rag/VectorStore.cpp src/rag/VectorStore.h src/rag/IEmbeddingProvider.h src/rag/GlmEmbeddingProvider.cpp src/rag/GlmEmbeddingProvider.h src/rag/RetrievalTool.h
+    src/rag/VectorStore.cpp src/rag/VectorStore.h src/rag/IEmbeddingProvider.h src/rag/GlmEmbeddingProvider.cpp src/rag/GlmEmbeddingProvider.h src/rag/RetrievalTool.cpp src/rag/RetrievalTool.h
     src/middleware/MiddlewarePipeline.cpp src/middleware/MiddlewarePipeline.h src/middleware/IMiddleware.h src/middleware/TokenCounterMiddleware.h src/middleware/ContextTruncationMiddleware.h src/middleware/LoggingMiddleware.h
     mainwindow.cpp mainwindow.h mainwindow.ui
 )
