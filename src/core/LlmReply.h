@@ -28,6 +28,7 @@ public:
     void emitChunk(const QString &text) { emit chunkReceived(text); }
     void emitFinished(const QString &fullText) { emit finished(fullText); emit done(); }
     void emitError(const QString &error) { emit errorOccurred(error); emit done(); }
+    void emitUsage(int prompt, int completion, int total) { emit usageReceived(prompt, completion, total); }
 
     // 中断:Provider 在 send() 时 setAbortHandle,调用方 stop() 时 abort()
     void setAbortHandle(std::function<void()> aborter) { m_aborter = std::move(aborter); }
@@ -44,6 +45,7 @@ signals:
     void finished(const QString &fullText);      // 完整文本(流式累积 / 非流式全量)
     void errorOccurred(const QString &error);
     void done();                                 // 终态(finished 或 error 后)
+    void usageReceived(int promptTokens, int completionTokens, int totalTokens);
 
 private:
     std::function<void()> m_aborter;

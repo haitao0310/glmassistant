@@ -32,6 +32,15 @@ void setupSseStreaming(HttpResponse *resp, LlmReply *reply)
                     *accumulated += text;
                     reply->emitChunk(text);
                 }
+                // 解析 usage(最后帧含 token 统计)
+                const QJsonDocument doc = QJsonDocument::fromJson(p.toUtf8());
+                const QJsonObject usage = doc.object().value("usage").toObject();
+                if (!usage.isEmpty()) {
+                    reply->emitUsage(
+                        usage.value("prompt_tokens").toInt(),
+                        usage.value("completion_tokens").toInt(),
+                        usage.value("total_tokens").toInt());
+                }
             }
         });
 

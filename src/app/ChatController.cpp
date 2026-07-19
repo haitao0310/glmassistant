@@ -158,6 +158,10 @@ void ChatController::connectReply(LlmReply *reply)
     QObject::connect(reply, &LlmReply::done, this, [this]() {
         if (m_currentReply) { m_currentReply->deleteLater(); m_currentReply = nullptr; }
     });
+
+    QObject::connect(reply, &LlmReply::usageReceived, this, [this](int p, int c, int t) {
+        emit tokenReported(p, c, t);
+    });
 }
 
 void ChatController::setState(State s)

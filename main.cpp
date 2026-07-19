@@ -2,8 +2,6 @@
 
 #include "src/infrastructure/Logger.h"
 #include "src/infrastructure/Constants.h"
-#include "src/infrastructure/SettingsManager.h"
-#include "src/infrastructure/ThemeManager.h"
 #include "src/network/HttpClient.h"
 #include "src/providers/GlmProvider.h"
 #include "src/providers/OllamaProvider.h"
@@ -59,11 +57,6 @@ int main(int argc, char *argv[])
     auto *controller = new glm::ChatController(provider, sessions, debug, &a);
 
     MainWindow w(controller, sessions, debug);
-
-    // QSettings 持久化:启动恢复 theme + window
-    glm::ThemeManager::apply(glm::SettingsManager::instance().theme(), &a);
-    w.restoreGeometry(glm::SettingsManager::instance().windowGeometry());
-
     w.show();
     return a.exec();
 }

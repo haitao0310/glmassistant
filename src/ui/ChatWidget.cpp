@@ -1,0 +1,190 @@
+#include "ChatWidget.h"
+
+#include "../app/SessionManager.h"
+#include "../ui/ParamPanel.h"
+#include "../infrastructure/ThemeManager.h"
+#include "../infrastructure/SettingsManager.h"
+
+#include <QListWidget>
+#include <QTextBrowser>
+#include <QTextEdit>
+#include <QPushButton>
+#include <QLabel>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QTextCursor>
+#include <QApplication>
+
+ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *sessions, QWidget *parent)
+    : QWidget(parent)
+    , m_controller(controller)
+    , m_sessions(sessions)
+{
+    m_paramPanel = new glm::ParamPanel(this);
+    buildUI();
+
+    // === 所有 connect 在构造函数(SoC:UI 构建 vs 信号绑定 分离) ===
+
+    // Controller → UI
+    connect(m_controller, &glm::ChatController::messageAppended, this, [this](const glm::Message &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::chunkReceived, this, [this](const QString &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::historyReplaced, this, [this](const QList<glm::Message> &){ rerenderChat(); });
+    connect(m_controller, &glm::ChatController::stateChanged, this, &ChatWidget::onStateChanged);
+    connect(m_controller, &glm::ChatController::errorOccurred, this, &ChatWidget::onErrorOccurred);
+    connect(m_controller, &glm::ChatController::tokenReported, this, [this](int p, int c, int t){
+        m_totalTokens += t;
+        m_lastTokenStr = QStringLiteral("↑%1 ↓%2 = %3 tokens | 累计 %4")
+                             .arg(p).arg(c).arg(t).arg(m_totalTokens);
+    });
+
+    // ParamPanel → Controller + QSettings
+    connect(m_paramPanel, &glm::ParamPanel::paramsChanged, m_controller, &glm::ChatController::setParams);
+    connect(m_paramPanel, &glm::ParamPanel::paramsChanged, this, [](const glm::GenerationParams &p){
+        glm::SettingsManager::instance().saveParams(p);
+    });
+    const glm::GenerationParams saved = glm::SettingsManager::instance().params();
+    m_paramPanel->setParams(saved);
+    m_controller->setParams(saved);
+
+    // SessionManager → UI
+    connect(m_sessions, &glm::SessionManager::sessionListChanged, this, &ChatWidget::refreshSessionList);
+    connect(m_sessions, &glm::SessionManager::currentChanged, this, &ChatWidget::onCurrentSessionChanged);
+    connect(m_sessions, &glm::SessionManager::messagesLoaded, m_controller, &glm::ChatController::setSession);
+
+    // 按钮
+    connect(m_sendBtn, &QPushButton::clicked, this, &ChatWidget::onSendClicked);
+    connect(m_newSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->newSession(); });
+    connect(m_delSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->deleteCurrent(); });
+    connect(m_themeBtn, &QPushButton::clicked, this, [this]{
+        const auto next = (glm::ThemeManager::current() == glm::ThemeManager::Theme::Light)
+                          ? glm::ThemeManager::Theme::Dark : glm::ThemeManager::Theme::Light;
+        glm::ThemeManager::apply(next, qApp);
+        glm::SettingsManager::instance().saveTheme(next);
+    });
+    connect(m_sessionList, &QListWidget::currentRowChanged, this, [this](int row){
+        const auto ss = m_sessions->sessions();
+        if (row >= 0 && row < ss.size()) {
+            const QString id = ss.at(row).id;
+            m_sessions->switchTo(id);
+            glm::SettingsManager::instance().saveLastSessionId(id);
+        }
+    });
+
+    refreshSessionList();
+    rerenderChat();
+    updateButtonByState(m_controller->state());
+}
+
+void ChatWidget::buildUI()
+{
+    m_sessionList = new QListWidget;
+    m_chatView = new QTextBrowser;
+    m_chatView->setOpenExternalLinks(true);
+    m_inputEdit = new QTextEdit;
+    m_inputEdit->setMaximumHeight(80);
+    m_inputEdit->setPlaceholderText(tr("输入消息..."));
+    m_sendBtn = new QPushButton(tr("发送"));
+    m_newSessionBtn = new QPushButton(tr("新建会话"));
+    m_delSessionBtn = new QPushButton(tr("删除"));
+    m_themeBtn = new QPushButton(tr("切换主题"));
+    m_statusLabel = new QLabel(tr("就绪"));
+
+    auto *outer = new QHBoxLayout(this);
+
+    auto *left = new QVBoxLayout;
+    left->addWidget(new QLabel(tr("会话")));
+    left->addWidget(m_sessionList);
+    left->addWidget(m_newSessionBtn);
+    left->addWidget(m_delSessionBtn);
+    outer->addLayout(left);
+
+    auto *center = new QVBoxLayout;
+    center->addWidget(m_chatView, 1);
+    center->addWidget(m_inputEdit);
+    auto *btnRow = new QHBoxLayout;
+    btnRow->addWidget(m_themeBtn);
+    btnRow->addWidget(m_statusLabel);
+    btnRow->addStretch();
+    btnRow->addWidget(m_sendBtn);
+    center->addLayout(btnRow);
+    outer->addLayout(center, 1);
+
+    outer->addWidget(m_paramPanel);
+}
+
+void ChatWidget::onSendClicked()
+{
+    using S = glm::ChatController::State;
+    const auto st = m_controller->state();
+    if (st == S::Sending || st == S::Streaming) { m_controller->stop(); return; }
+    const QString text = m_inputEdit->toPlainText().trimmed();
+    if (text.isEmpty()) return;
+    m_inputEdit->clear();
+    m_controller->send(text);
+}
+
+void ChatWidget::onStateChanged(glm::ChatController::State s)
+{
+    using S = glm::ChatController::State;
+    m_inputEdit->setEnabled(!(s == S::Sending || s == S::Streaming));
+    QString status;
+    switch (s) {
+    case S::Idle:     status = tr("就绪"); break;
+    case S::Sending:  status = tr("发送中..."); break;
+    case S::Streaming:status = tr("生成中..."); break;
+    case S::Finished: status = m_lastTokenStr.isEmpty() ? tr("完成") : m_lastTokenStr; break;
+    case S::Error:    status = tr("出错"); break;
+    case S::Aborted:  status = tr("已中断"); break;
+    }
+    m_statusLabel->setText(status);
+    updateButtonByState(s);
+}
+
+void ChatWidget::onErrorOccurred(const QString &error)
+{
+    m_statusLabel->setText(tr("错误: ") + error);
+}
+
+void ChatWidget::refreshSessionList()
+{
+    m_sessionList->blockSignals(true);
+    m_sessionList->clear();
+    const auto ss = m_sessions->sessions();
+    const QString cur = m_sessions->currentSessionId();
+    int curRow = -1;
+    for (int i = 0; i < ss.size(); ++i) {
+        m_sessionList->addItem(ss.at(i).title.isEmpty() ? tr("(无标题)") : ss.at(i).title);
+        if (ss.at(i).id == cur) curRow = i;
+    }
+    if (curRow >= 0) m_sessionList->setCurrentRow(curRow);
+    m_sessionList->blockSignals(false);
+}
+
+void ChatWidget::onCurrentSessionChanged(const QString &id)
+{
+    Q_UNUSED(id);
+    refreshSessionList();
+}
+
+void ChatWidget::rerenderChat()
+{
+    const auto hist = m_controller->history();
+    QString md;
+    for (const auto &m : hist) {
+        if (m.role == glm::Role::User) {
+            md += QStringLiteral("**我:** ") + m.content + QStringLiteral("\n\n");
+        } else if (m.role == glm::Role::Assistant) {
+            md += QStringLiteral("**GLM:** ") + m.content + QStringLiteral("\n\n");
+        }
+    }
+    m_chatView->setMarkdown(md);
+    m_chatView->moveCursor(QTextCursor::End);
+}
+
+void ChatWidget::updateButtonByState(glm::ChatController::State s)
+{
+    using S = glm::ChatController::State;
+    const bool gen = (s == S::Sending || s == S::Streaming);
+    m_sendBtn->setText(gen ? tr("停止") : tr("发送"));
+    m_sendBtn->setEnabled(true);
+}
