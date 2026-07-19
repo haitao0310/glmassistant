@@ -30,6 +30,9 @@ private slots:
     void refreshSessionList();
     void onCurrentSessionChanged(const QString &id);
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private:
     Ui::MainWindow *ui;
     glm::ChatController *m_controller;

@@ -51,6 +51,15 @@ GenerationParams ParamPanel::params() const
     return p;
 }
 
+void ParamPanel::setParams(const GenerationParams &p)
+{
+    const int idx = m_modelBox->findText(p.model);
+    if (idx >= 0) m_modelBox->setCurrentIndex(idx);
+    m_tempBox->setValue(p.temperature);
+    m_topPBox->setValue(p.topP);
+    m_maxTokBox->setValue(p.maxTokens);
+}
+
 void ParamPanel::emitChanged()
 {
     emit paramsChanged(params());

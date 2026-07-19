@@ -21,6 +21,7 @@ public:
     explicit ParamPanel(QWidget *parent = nullptr);
 
     GenerationParams params() const;
+    void setParams(const GenerationParams &p);   // 从 QSettings 恢复时调
 
 signals:
     void paramsChanged(const glm::GenerationParams &p);

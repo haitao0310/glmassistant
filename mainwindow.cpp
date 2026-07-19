@@ -5,6 +5,7 @@
 #include "src/ui/ParamPanel.h"
 #include "src/ui/DebugView.h"
 #include "src/infrastructure/ThemeManager.h"
+#include "src/infrastructure/SettingsManager.h"
 
 #include <QTabWidget>
 #include <QListWidget>
@@ -42,7 +43,12 @@ MainWindow::MainWindow(glm::ChatController *controller, glm::SessionManager *ses
     connect(m_controller, &glm::ChatController::errorOccurred, this, &MainWindow::onErrorOccurred);
 
     connect(m_paramPanel, &glm::ParamPanel::paramsChanged, m_controller, &glm::ChatController::setParams);
-    m_controller->setParams(m_paramPanel->params());
+    connect(m_paramPanel, &glm::ParamPanel::paramsChanged, this, [](const glm::GenerationParams &p){
+        glm::SettingsManager::instance().saveParams(p);
+    });
+    const glm::GenerationParams saved = glm::SettingsManager::instance().params();
+    m_paramPanel->setParams(saved);
+    m_controller->setParams(saved);
 
     connect(m_sessions, &glm::SessionManager::sessionListChanged, this, &MainWindow::refreshSessionList);
     connect(m_sessions, &glm::SessionManager::currentChanged, this, &MainWindow::onCurrentSessionChanged);
@@ -97,16 +103,27 @@ QWidget *MainWindow::buildChatTab()
         const auto next = (glm::ThemeManager::current() == glm::ThemeManager::Theme::Light)
                           ? glm::ThemeManager::Theme::Dark : glm::ThemeManager::Theme::Light;
         glm::ThemeManager::apply(next, qApp);
+        glm::SettingsManager::instance().saveTheme(next);
     });
     connect(m_sessionList, &QListWidget::currentRowChanged, this, [this](int row){
         const auto ss = m_sessions->sessions();
-        if (row >= 0 && row < ss.size()) m_sessions->switchTo(ss.at(row).id);
+        if (row >= 0 && row < ss.size()) {
+            const QString id = ss.at(row).id;
+            m_sessions->switchTo(id);
+            glm::SettingsManager::instance().saveLastSessionId(id);
+        }
     });
 
     return chatWidget;
 }
 
 MainWindow::~MainWindow() { delete ui; }
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    glm::SettingsManager::instance().saveWindowGeometry(saveGeometry());
+    QMainWindow::closeEvent(event);
+}
 
 void MainWindow::onSendClicked()
 {

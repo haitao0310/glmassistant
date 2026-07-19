@@ -22,6 +22,7 @@ qt_add_executable(GlmAssistant
     src/providers/OllamaProvider.cpp src/providers/OllamaProvider.h
     src/providers/CachingProvider.cpp src/providers/CachingProvider.h
     src/infrastructure/Logger.cpp src/infrastructure/Logger.h src/infrastructure/Constants.h src/infrastructure/Error.h
+    src/infrastructure/SettingsManager.cpp src/infrastructure/SettingsManager.h
     src/infrastructure/ThemeManager.cpp src/infrastructure/ThemeManager.h
     src/ui/ParamPanel.cpp src/ui/ParamPanel.h
     src/ui/DebugView.cpp src/ui/DebugView.h
