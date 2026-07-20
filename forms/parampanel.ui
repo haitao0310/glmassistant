@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ParamPanel</class>
+ <widget class="QWidget" name="ParamPanel">
+  <layout class="QFormLayout" name="formLayout">
+   <item row="0" column="0">
+    <widget class="QLabel" name="modelLabel">
+     <property name="text"><string>模型</string></property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QComboBox" name="modelBox"/>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="tempLabel">
+     <property name="text"><string>temperature</string></property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QDoubleSpinBox" name="tempBox">
+     <property name="decimals"><number>1</number></property>
+     <property name="minimum"><double>0.000000000000000</double></property>
+     <property name="maximum"><double>2.000000000000000</double></property>
+     <property name="singleStep"><double>0.100000000000000</double></property>
+     <property name="value"><double>0.700000000000000</double></property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="topPLabel">
+     <property name="text"><string>top_p</string></property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QDoubleSpinBox" name="topPBox">
+     <property name="decimals"><number>1</number></property>
+     <property name="minimum"><double>0.000000000000000</double></property>
+     <property name="maximum"><double>1.000000000000000</double></property>
+     <property name="singleStep"><double>0.100000000000000</double></property>
+     <property name="value"><double>1.000000000000000</double></property>
+    </widget>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="maxTokLabel">
+     <property name="text"><string>max_tokens</string></property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QSpinBox" name="maxTokBox">
+     <property name="minimum"><number>1</number></property>
+     <property name="maximum"><number>32768</number></property>
+     <property name="value"><number>2048</number></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

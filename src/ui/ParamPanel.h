@@ -5,34 +5,28 @@
 #include "../core/LlmTypes.h"
 
 QT_BEGIN_NAMESPACE
-class QDoubleSpinBox;
-class QSpinBox;
-class QComboBox;
+namespace Ui { class ParamPanel; }
 QT_END_NAMESPACE
 
 namespace glm {
 
-// 参数面板:temperature / top_p / max_tokens / model。
-// UI 层,不碰业务;调参发 paramsChanged 给 Controller。
+// 参数面板:模型/temperature/top_p/max_tokens。
+// UI 在 forms/parampanel.ui(Designer)。cpp 只做 connect + 逻辑。
 class ParamPanel : public QWidget
 {
     Q_OBJECT
 public:
     explicit ParamPanel(QWidget *parent = nullptr);
+    ~ParamPanel();
 
     GenerationParams params() const;
-    void setParams(const GenerationParams &p);   // 从 QSettings 恢复时调
+    void setParams(const GenerationParams &p);
 
 signals:
     void paramsChanged(const glm::GenerationParams &p);
 
 private:
-    QComboBox *m_modelBox;
-    QDoubleSpinBox *m_tempBox;
-    QDoubleSpinBox *m_topPBox;
-    QSpinBox *m_maxTokBox;
-
-    void emitChanged();
+    Ui::ParamPanel *ui;
 };
 
 } // namespace glm

@@ -1,68 +1,42 @@
 #include "ParamPanel.h"
-#include "../infrastructure/Constants.h"
+#include "ui_parampanel.h"
 
-#include <QComboBox>
-#include <QDoubleSpinBox>
-#include <QSpinBox>
-#include <QFormLayout>
+#include "../infrastructure/Constants.h"
 
 namespace glm {
 
-ParamPanel::ParamPanel(QWidget *parent) : QWidget(parent)
+ParamPanel::ParamPanel(QWidget *parent)
+    : QWidget(parent)
+    , ui(new Ui::ParamPanel)
 {
-    auto *form = new QFormLayout(this);
+    ui->setupUi(this);
+    ui->modelBox->addItems(constants::GLM_MODELS);
 
-    m_modelBox = new QComboBox;
-    m_modelBox->addItems(constants::GLM_MODELS);
-
-    m_tempBox = new QDoubleSpinBox;
-    m_tempBox->setRange(0.0, 2.0);
-    m_tempBox->setSingleStep(0.1);
-    m_tempBox->setValue(0.7);
-
-    m_topPBox = new QDoubleSpinBox;
-    m_topPBox->setRange(0.0, 1.0);
-    m_topPBox->setSingleStep(0.1);
-    m_topPBox->setValue(1.0);
-
-    m_maxTokBox = new QSpinBox;
-    m_maxTokBox->setRange(1, 32768);
-    m_maxTokBox->setValue(2048);
-
-    form->addRow(tr("模型"), m_modelBox);
-    form->addRow(tr("temperature"), m_tempBox);
-    form->addRow(tr("top_p"), m_topPBox);
-    form->addRow(tr("max_tokens"), m_maxTokBox);
-
-    // 任一控件变 → 发 paramsChanged
-    connect(m_modelBox, &QComboBox::currentTextChanged, this, [this](const QString &){ emitChanged(); });
-    connect(m_tempBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double){ emitChanged(); });
-    connect(m_topPBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double){ emitChanged(); });
-    connect(m_maxTokBox, qOverload<int>(&QSpinBox::valueChanged), this, [this](int){ emitChanged(); });
+    connect(ui->modelBox, &QComboBox::currentTextChanged, this, [this](const QString &){ emit paramsChanged(params()); });
+    connect(ui->tempBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double){ emit paramsChanged(params()); });
+    connect(ui->topPBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double){ emit paramsChanged(params()); });
+    connect(ui->maxTokBox, qOverload<int>(&QSpinBox::valueChanged), this, [this](int){ emit paramsChanged(params()); });
 }
+
+ParamPanel::~ParamPanel() { delete ui; }
 
 GenerationParams ParamPanel::params() const
 {
     GenerationParams p;
-    p.model = m_modelBox->currentText();
-    p.temperature = m_tempBox->value();
-    p.topP = m_topPBox->value();
-    p.maxTokens = m_maxTokBox->value();
+    p.model = ui->modelBox->currentText();
+    p.temperature = ui->tempBox->value();
+    p.topP = ui->topPBox->value();
+    p.maxTokens = ui->maxTokBox->value();
     return p;
 }
 
 void ParamPanel::setParams(const GenerationParams &p)
 {
-    const int idx = m_modelBox->findText(p.model);
-    if (idx >= 0) m_modelBox->setCurrentIndex(idx);
-    m_tempBox->setValue(p.temperature);
-    m_topPBox->setValue(p.topP);
-    m_maxTokBox->setValue(p.maxTokens);
-}
-
-void ParamPanel::emitChanged()
-{
-    emit paramsChanged(params());
+    const int idx = ui->modelBox->findText(p.model);
+    if (idx >= 0) ui->modelBox->setCurrentIndex(idx);
+    ui->tempBox->setValue(p.temperature);
+    ui->topPBox->setValue(p.topP);
+    ui->maxTokBox->setValue(p.maxTokens);
 }
 
 } // namespace glm
