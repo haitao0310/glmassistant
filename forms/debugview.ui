@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DebugView</class>
+ <widget class="QWidget" name="DebugView">
+  <layout class="QVBoxLayout" name="mainLayout">
+   <item>
+    <widget class="QLabel" name="historyLabel">
+     <property name="text"><string>历史请求</string></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QListWidget" name="historyList"/>
+   </item>
+   <item>
+    <widget class="QLabel" name="requestLabel">
+     <property name="text"><string>请求 body(可编辑后重放)</string></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="requestView"/>
+   </item>
+   <item>
+    <widget class="QLabel" name="responseLabel">
+     <property name="text"><string>响应</string></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="responseView">
+     <property name="readOnly"><bool>true</bool></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="replayBtn">
+     <property name="text"><string>重放选中</string></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

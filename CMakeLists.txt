@@ -27,6 +27,7 @@ qt_add_executable(GlmAssistant
     src/ui/ChatWidget.cpp src/ui/ChatWidget.h
     forms/chatwidget.ui
     forms/parampanel.ui
+    forms/debugview.ui
     src/ui/ParamPanel.cpp src/ui/ParamPanel.h
     src/ui/DebugView.cpp src/ui/DebugView.h
     src/ui/MarkdownRenderer.cpp src/ui/MarkdownRenderer.h

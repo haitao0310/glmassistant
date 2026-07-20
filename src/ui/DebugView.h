@@ -6,16 +6,15 @@
 #include "../core/LlmTypes.h"
 
 QT_BEGIN_NAMESPACE
-class QListWidget;
-class QPlainTextEdit;
-class QPushButton;
+namespace Ui { class DebugView; }
 QT_END_NAMESPACE
 
 namespace glm {
 
 class DebugController;
 
-// 调试视图(P4):历史请求库 + 原始请求/响应 JSON 查看(可编辑) + 重放。
+// 调试视图:历史请求库 + 原始请求/响应 JSON 查看 + 重放。
+// UI 在 forms/debugview.ui(Designer)。cpp 只做 connect + 逻辑。
 class DebugView : public QWidget
 {
     Q_OBJECT
@@ -28,11 +27,8 @@ private slots:
     void onReplay();
 
 private:
+    Ui::DebugView *ui;
     DebugController *m_ctrl;
-    QListWidget *m_historyList;
-    QPlainTextEdit *m_requestView;
-    QPlainTextEdit *m_responseView;
-    QPushButton *m_replayBtn;
     QList<RequestRecord> m_records;
 };
 
