@@ -25,6 +25,7 @@ qt_add_executable(GlmAssistant
     src/infrastructure/SettingsManager.cpp src/infrastructure/SettingsManager.h
     src/infrastructure/ThemeManager.cpp src/infrastructure/ThemeManager.h
     src/ui/ChatWidget.cpp src/ui/ChatWidget.h
+    forms/chatwidget.ui
     src/ui/ParamPanel.cpp src/ui/ParamPanel.h
     src/ui/DebugView.cpp src/ui/DebugView.h
     src/ui/MarkdownRenderer.cpp src/ui/MarkdownRenderer.h
@@ -36,6 +37,7 @@ qt_add_executable(GlmAssistant
 )
 target_include_directories(GlmAssistant PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(GlmAssistant PRIVATE Qt6::Widgets Qt6::Network Qt6::Sql Qt6::Qml)
+set_target_properties(GlmAssistant PROPERTIES AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/forms)
 
 # 单元测试
 enable_testing()

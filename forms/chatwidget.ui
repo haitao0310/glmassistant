@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ChatWidget</class>
+ <widget class="QWidget" name="ChatWidget">
+  <layout class="QHBoxLayout" name="outerLayout">
+   <item>
+    <layout class="QVBoxLayout" name="leftLayout">
+     <item>
+      <widget class="QLabel" name="sessionLabel">
+       <property name="text"><string>会话</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QListWidget" name="sessionList"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="newSessionBtn">
+       <property name="text"><string>新建会话</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="delSessionBtn">
+       <property name="text"><string>删除</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QVBoxLayout" name="centerLayout">
+     <item>
+      <widget class="QTextBrowser" name="chatView">
+       <property name="openExternalLinks"><bool>true</bool></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QTextEdit" name="inputEdit">
+       <property name="maximumSize"><size><width>16777215</width><height>80</height></size></property>
+       <property name="placeholderText"><string>输入消息...</string></property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="btnRowLayout">
+       <item>
+        <widget class="QPushButton" name="themeBtn">
+         <property name="text"><string>切换主题</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="statusLabel">
+         <property name="text"><string>就绪</string></property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="btnRowSpacer">
+         <property name="orientation"><enum>Qt::Horizontal</enum></property>
+         <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="sendBtn">
+         <property name="text"><string>发送</string></property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="glm::ParamPanel" name="paramPanel"/>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>glm::ParamPanel</class>
+   <extends>QWidget</extends>
+   <header>ui/ParamPanel.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
