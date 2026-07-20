@@ -11,6 +11,10 @@
 #include <QMenu>
 #include <QClipboard>
 #include <QContextMenuEvent>
+#include <QFileDialog>
+#include <QFile>
+#include <QTextStream>
+#include <QDateTime>
 
 ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *sessions, QWidget *parent)
     : QWidget(parent)
@@ -54,6 +58,26 @@ ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *ses
     connect(ui->sendBtn, &QPushButton::clicked, this, &ChatWidget::onSendClicked);
     connect(ui->newSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->newSession(); });
     connect(ui->delSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->deleteCurrent(); });
+    connect(ui->exportBtn, &QPushButton::clicked, this, [this]{
+        const auto hist = m_controller->history();
+        if (hist.isEmpty()) return;
+        const QString defaultName = QStringLiteral("GlmAssistant_%1.md")
+            .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss")));
+        const QString path = QFileDialog::getSaveFileName(this, tr("导出会话"), defaultName,
+            QStringLiteral("Markdown (*.md);;文本 (*.txt)"));
+        if (path.isEmpty()) return;
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
+        QTextStream out(&f);
+        out.setEncoding(QStringConverter::Utf8);
+        for (const auto &m : hist) {
+            const QString who = (m.role == glm::Role::User) ? QStringLiteral("**我:**\n\n")
+                              : (m.role == glm::Role::Assistant) ? QStringLiteral("**GLM:**\n\n") : QString();
+            out << who << m.content << QStringLiteral("\n\n---\n\n");
+        }
+        f.close();
+        ui->statusLabel->setText(tr("已导出: %1").arg(path));
+    });
     connect(ui->themeBtn, &QPushButton::clicked, this, [this]{
         const auto next = (glm::ThemeManager::current() == glm::ThemeManager::Theme::Light)
                           ? glm::ThemeManager::Theme::Dark : glm::ThemeManager::Theme::Light;

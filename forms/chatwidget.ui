@@ -23,6 +23,11 @@
        <property name="text"><string>删除</string></property>
       </widget>
      </item>
+     <item>
+      <widget class="QPushButton" name="exportBtn">
+       <property name="text"><string>导出</string></property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>
