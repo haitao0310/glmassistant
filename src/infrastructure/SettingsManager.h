@@ -34,6 +34,10 @@ public:
     QString lastSessionId() const;
     void saveLastSessionId(const QString &id);
 
+    // API Key(明文存 ini,P4 加密)
+    QString apiKey() const;
+    void saveApiKey(const QString &key);
+
 private:
     SettingsManager() = default;
 };

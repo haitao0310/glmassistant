@@ -5,6 +5,7 @@
 #include "../ui/ParamPanel.h"
 #include "../infrastructure/ThemeManager.h"
 #include "../infrastructure/SettingsManager.h"
+#include "SettingsDialog.h"
 
 #include <QTextCursor>
 #include <QApplication>
@@ -58,6 +59,12 @@ ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *ses
     connect(ui->sendBtn, &QPushButton::clicked, this, &ChatWidget::onSendClicked);
     connect(ui->newSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->newSession(); });
     connect(ui->delSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->deleteCurrent(); });
+    connect(ui->settingsBtn, &QPushButton::clicked, this, [this]{
+        glm::SettingsDialog dlg(this);
+        if (dlg.exec() == QDialog::Accepted) {
+            glm::ThemeManager::apply(glm::SettingsManager::instance().theme(), qApp);
+        }
+    });
     connect(ui->exportBtn, &QPushButton::clicked, this, [this]{
         const auto hist = m_controller->history();
         if (hist.isEmpty()) return;

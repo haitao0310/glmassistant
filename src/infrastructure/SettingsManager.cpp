@@ -12,6 +12,7 @@ static const char *kKeyMaxTok = "params/maxTokens";
 static const char *kKeyTheme = "ui/theme";
 static const char *kKeyWindow = "ui/windowGeometry";
 static const char *kKeySession = "session/lastId";
+static const char *kKeyApiKey = "auth/apiKey";
 
 SettingsManager &SettingsManager::instance()
 {
@@ -73,6 +74,18 @@ void SettingsManager::saveLastSessionId(const QString &id)
 {
     QSettings s;
     s.setValue(kKeySession, id);
+}
+
+QString SettingsManager::apiKey() const
+{
+    QSettings s;
+    return s.value(kKeyApiKey).toString();
+}
+
+void SettingsManager::saveApiKey(const QString &key)
+{
+    QSettings s;
+    s.setValue(kKeyApiKey, key);
 }
 
 } // namespace glm

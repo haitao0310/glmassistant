@@ -2,6 +2,7 @@
 
 #include "src/infrastructure/Logger.h"
 #include "src/infrastructure/Constants.h"
+#include "src/infrastructure/SettingsManager.h"
 #include "src/network/HttpClient.h"
 #include "src/providers/GlmProvider.h"
 #include "src/providers/OllamaProvider.h"
@@ -35,7 +36,9 @@ int main(int argc, char *argv[])
         glm::logError("main", QStringLiteral("DB open failed: %1").arg(dbPath));
     }
 
-    const QByteArray apiKey = qgetenv(glm::constants::GLM_API_ENV_KEY);
+    // API Key:优先 QSettings(设置对话框),fallback 环境变量
+    QByteArray apiKey = glm::SettingsManager::instance().apiKey().toUtf8();
+    if (apiKey.isEmpty()) apiKey = qgetenv(glm::constants::GLM_API_ENV_KEY);
     if (apiKey.isEmpty()) {
         glm::logError("main", QStringLiteral("%1 未设置,窗口内会提示")
                           .arg(QString::fromUtf8(glm::constants::GLM_API_ENV_KEY)));

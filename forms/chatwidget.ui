@@ -51,6 +51,11 @@
         </widget>
        </item>
        <item>
+        <widget class="QPushButton" name="settingsBtn">
+         <property name="text"><string>设置</string></property>
+        </widget>
+       </item>
+       <item>
         <widget class="QLabel" name="statusLabel">
          <property name="text"><string>就绪</string></property>
         </widget>
