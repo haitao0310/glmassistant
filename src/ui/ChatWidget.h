@@ -28,6 +28,9 @@ private slots:
     void refreshSessionList();
     void onCurrentSessionChanged(const QString &id);
 
+protected:
+    void contextMenuEvent(QContextMenuEvent *event) override;
+
 private:
     Ui::ChatWidget *ui;
     glm::ChatController *m_controller;

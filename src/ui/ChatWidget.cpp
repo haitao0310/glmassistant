@@ -8,6 +8,9 @@
 
 #include <QTextCursor>
 #include <QApplication>
+#include <QMenu>
+#include <QClipboard>
+#include <QContextMenuEvent>
 
 ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *sessions, QWidget *parent)
     : QWidget(parent)
@@ -148,4 +151,20 @@ void ChatWidget::updateButtonByState(glm::ChatController::State s)
     const bool gen = (s == S::Sending || s == S::Streaming);
     ui->sendBtn->setText(gen ? tr("停止") : tr("发送"));
     ui->sendBtn->setEnabled(true);
+}
+
+void ChatWidget::contextMenuEvent(QContextMenuEvent *event)
+{
+    auto *menu = new QMenu(this);
+    auto *copySelected = menu->addAction(tr("复制选中"));
+    auto *copyAll = menu->addAction(tr("复制全部"));
+
+    const QAction *chosen = menu->exec(event->globalPos());
+    if (chosen == copySelected) {
+        const QString sel = ui->chatView->textCursor().selectedText();
+        if (!sel.isEmpty()) QApplication::clipboard()->setText(sel);
+    } else if (chosen == copyAll) {
+        QApplication::clipboard()->setText(ui->chatView->toPlainText());
+    }
+    menu->deleteLater();
 }
