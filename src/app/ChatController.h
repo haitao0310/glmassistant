@@ -7,6 +7,7 @@
 #include "../core/ILlmProvider.h"
 #include "../core/LlmTypes.h"
 #include "../core/LlmReply.h"
+#include "../core/ProviderRegistry.h"
 
 namespace glm {
 
@@ -14,7 +15,7 @@ class SessionManager;
 class DebugController;
 
 // 业务层:协调 UI ↔ Provider,持多轮历史 + 生成参数,管理状态机(ADR-009)。
-// P3:历史持久化 SQLite;P4:请求完成记入 DebugController(调试历史库)。
+// P:持 ProviderRegistry(多 Provider 热切换,不硬编码单个 provider)。
 class ChatController : public QObject
 {
     Q_OBJECT
@@ -22,7 +23,7 @@ public:
     enum class State { Idle, Sending, Streaming, Finished, Error, Aborted };
     Q_ENUM(State)
 
-    ChatController(ILlmProvider *provider, SessionManager *sessions,
+    ChatController(ProviderRegistry *registry, SessionManager *sessions,
                    DebugController *debug = nullptr, QObject *parent = nullptr);
 
     void send(const QString &userText);
@@ -30,6 +31,11 @@ public:
     void clearHistory();
     void setParams(const GenerationParams &p);
     void setSession(const QList<Message> &msgs);
+
+    // Provider 热切换
+    void setProviderById(const QString &id);
+    QString currentProviderId() const;
+    QStringList providerIds() const;
 
     State state() const { return m_state; }
     QList<Message> history() const { return m_messages; }
@@ -43,8 +49,10 @@ signals:
     void messageAppended(const glm::Message &m);
     void historyReplaced(const QList<glm::Message> &msgs);
     void tokenReported(int promptTokens, int completionTokens, int totalTokens);
+    void providerChanged(const QString &id);
 
 private:
+    ProviderRegistry *m_registry;
     ILlmProvider *m_provider;
     SessionManager *m_sessions;
     DebugController *m_debug;
@@ -56,8 +64,7 @@ private:
     void setState(State s);
     void connectReply(LlmReply *reply);
     void persistMessage(const Message &m);
-    void persistUpdateLast(const QString &content);
-    void recordDebug(LlmReply *reply);   // P4:请求完成记录到调试库
+    void recordDebug(LlmReply *reply);
 };
 
 } // namespace glm

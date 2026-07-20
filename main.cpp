@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
     auto *sessions = new glm::SessionManager(&a);
     auto *debug = new glm::DebugController(provider, sessions, &a);
     auto *agent = new glm::AgentController(provider, &a);
-    auto *controller = new glm::ChatController(provider, sessions, debug, &a);
+    auto *controller = new glm::ChatController(&glm::ProviderRegistry::instance(), sessions, debug, &a);
 
     MainWindow w(controller, sessions, debug);
     w.show();

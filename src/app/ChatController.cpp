@@ -9,10 +9,11 @@
 
 namespace glm {
 
-ChatController::ChatController(ILlmProvider *provider, SessionManager *sessions,
+ChatController::ChatController(ProviderRegistry *registry, SessionManager *sessions,
                                DebugController *debug, QObject *parent)
     : QObject(parent)
-    , m_provider(provider)
+    , m_registry(registry)
+    , m_provider(registry ? registry->provider(registry->ids().isEmpty() ? QString() : registry->ids().first()) : nullptr)
     , m_sessions(sessions)
     , m_debug(debug)
 {
@@ -23,13 +24,6 @@ void ChatController::persistMessage(const Message &m)
     if (!m_sessions) return;
     const QString sid = m_sessions->currentSessionId();
     if (!sid.isEmpty()) DatabaseManager::instance().appendMessage(sid, m);
-}
-
-void ChatController::persistUpdateLast(const QString &content)
-{
-    if (!m_sessions) return;
-    const QString sid = m_sessions->currentSessionId();
-    if (!sid.isEmpty()) DatabaseManager::instance().updateLastMessageContent(sid, content);
 }
 
 void ChatController::recordDebug(LlmReply *reply)
@@ -110,6 +104,27 @@ void ChatController::setParams(const GenerationParams &p)
 {
     m_params = p;
     logDebug("chat", QStringLiteral("params: model=%1 temp=%2").arg(p.model).arg(p.temperature));
+}
+
+void ChatController::setProviderById(const QString &id)
+{
+    if (!m_registry) return;
+    ILlmProvider *p = m_registry->provider(id);
+    if (p && p != m_provider) {
+        m_provider = p;
+        emit providerChanged(id);
+        logInfo("chat", QStringLiteral("provider switched to %1").arg(id));
+    }
+}
+
+QString ChatController::currentProviderId() const
+{
+    return m_provider ? m_provider->id() : QString();
+}
+
+QStringList ChatController::providerIds() const
+{
+    return m_registry ? m_registry->ids() : QStringList{};
 }
 
 void ChatController::setSession(const QList<Message> &msgs)

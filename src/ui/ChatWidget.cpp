@@ -38,6 +38,10 @@ ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *ses
     ui->paramPanel->setParams(saved);
     m_controller->setParams(saved);
 
+    // Provider 热切换:ParamPanel 填 providerBox + connect providerChanged
+    ui->paramPanel->fillProviders(m_controller->providerIds());
+    connect(ui->paramPanel, &glm::ParamPanel::providerChanged, m_controller, &glm::ChatController::setProviderById);
+
     // SessionManager → UI
     connect(m_sessions, &glm::SessionManager::sessionListChanged, this, &ChatWidget::refreshSessionList);
     connect(m_sessions, &glm::SessionManager::currentChanged, this, &ChatWidget::onCurrentSessionChanged);

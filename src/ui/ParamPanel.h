@@ -22,8 +22,12 @@ public:
     GenerationParams params() const;
     void setParams(const GenerationParams &p);
 
+    // Provider 热切换
+    void fillProviders(const QStringList &ids);
+
 signals:
     void paramsChanged(const glm::GenerationParams &p);
+    void providerChanged(const QString &id);
 
 private:
     Ui::ParamPanel *ui;

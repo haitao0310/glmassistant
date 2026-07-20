@@ -16,6 +16,15 @@ ParamPanel::ParamPanel(QWidget *parent)
     connect(ui->tempBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double){ emit paramsChanged(params()); });
     connect(ui->topPBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double){ emit paramsChanged(params()); });
     connect(ui->maxTokBox, qOverload<int>(&QSpinBox::valueChanged), this, [this](int){ emit paramsChanged(params()); });
+    connect(ui->providerBox, &QComboBox::currentTextChanged, this, [this](const QString &id){ emit providerChanged(id); });
+}
+
+void ParamPanel::fillProviders(const QStringList &ids)
+{
+    ui->providerBox->blockSignals(true);
+    ui->providerBox->clear();
+    for (const auto &id : ids) ui->providerBox->addItem(id);
+    ui->providerBox->blockSignals(false);
 }
 
 ParamPanel::~ParamPanel() { delete ui; }
