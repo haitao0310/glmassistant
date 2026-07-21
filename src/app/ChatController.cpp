@@ -83,6 +83,16 @@ void ChatController::send(const QString &userText)
     connectReply(m_currentReply);
 }
 
+void ChatController::resendEdited(const QString &newText)
+{
+    if (m_state == State::Sending || m_state == State::Streaming) return;
+    // 内存回滚:删最后 user 及之后所有 assistant
+    while (!m_messages.isEmpty() && m_messages.last().role != Role::User) m_messages.removeLast();
+    if (!m_messages.isEmpty()) m_messages.removeLast();
+    emit historyReplaced(m_messages);
+    send(newText);
+}
+
 void ChatController::stop()
 {
     if (m_state != State::Sending && m_state != State::Streaming) return;

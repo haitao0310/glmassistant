@@ -188,7 +188,12 @@ void ChatWidget::onSendClicked()
     }
 
     ui->inputEdit->clear();
-    m_controller->send(text);
+    if (m_editResend) {
+        m_editResend = false;
+        m_controller->resendEdited(text);
+    } else {
+        m_controller->send(text);
+    }
 }
 
 void ChatWidget::onStateChanged(glm::ChatController::State s)
@@ -266,6 +271,8 @@ void ChatWidget::contextMenuEvent(QContextMenuEvent *event)
     auto *menu = new QMenu(this);
     auto *copySelected = menu->addAction(tr("复制选中"));
     auto *copyAll = menu->addAction(tr("复制全部"));
+    menu->addSeparator();
+    auto *editResend = menu->addAction(tr("编辑重发最后消息"));
 
     const QAction *chosen = menu->exec(event->globalPos());
     if (chosen == copySelected) {
@@ -273,6 +280,19 @@ void ChatWidget::contextMenuEvent(QContextMenuEvent *event)
         if (!sel.isEmpty()) QApplication::clipboard()->setText(sel);
     } else if (chosen == copyAll) {
         QApplication::clipboard()->setText(ui->chatView->toPlainText());
+    } else if (chosen == editResend) {
+        // 取最后 user 消息 → 放回输入框 + 设编辑重发模式
+        const auto hist = m_controller->history();
+        for (int i = hist.size() - 1; i >= 0; --i) {
+            if (hist.at(i).role == glm::Role::User) {
+                ui->inputEdit->setPlainText(hist.at(i).content);
+                ui->inputEdit->setFocus();
+                ui->inputEdit->moveCursor(QTextCursor::End);
+                m_editResend = true;
+                ui->statusLabel->setText(tr("编辑模式:发送将替换原消息"));
+                break;
+            }
+        }
     }
     menu->deleteLater();
 }

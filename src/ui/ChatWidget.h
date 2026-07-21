@@ -37,6 +37,7 @@ private:
     glm::SessionManager *m_sessions;
     QString m_lastTokenStr;
     int m_totalTokens = 0;
+    bool m_editResend = false;   // 编辑重发模式(右键触发)
 
     void rerenderChat();
     void updateButtonByState(glm::ChatController::State s);

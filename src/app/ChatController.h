@@ -27,6 +27,7 @@ public:
                    DebugController *debug = nullptr, QObject *parent = nullptr);
 
     void send(const QString &userText);
+    void resendEdited(const QString &newText);   // 编辑重发:回滚最后 user → send 新
     void stop();
     void clearHistory();
     void setParams(const GenerationParams &p);
