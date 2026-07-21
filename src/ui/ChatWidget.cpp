@@ -112,8 +112,25 @@ void ChatWidget::onSendClicked()
     using S = glm::ChatController::State;
     const auto st = m_controller->state();
     if (st == S::Sending || st == S::Streaming) { m_controller->stop(); return; }
-    const QString text = ui->inputEdit->toPlainText().trimmed();
+    QString text = ui->inputEdit->toPlainText().trimmed();
     if (text.isEmpty()) return;
+
+    // 快捷指令:/cmd 展开为预设 prompt
+    static const QHash<QString, QString> kSnippets = {
+        {QStringLiteral("/translate"), QStringLiteral("请将以下内容翻译成中文:\n\n")},
+        {QStringLiteral("/summary"), QStringLiteral("请用简洁的要点总结以下内容:\n\n")},
+        {QStringLiteral("/code"), QStringLiteral("请用 C++ 和 Qt6 实现以下功能:\n\n")},
+        {QStringLiteral("/review"), QStringLiteral("请 Code Review 以下代码,关注:\n1. Bug\n2. 架构\n3. 性能\n4. 线程安全\n\n代码:\n\n")},
+        {QStringLiteral("/explain"), QStringLiteral("请详细解释以下概念/代码:\n\n")},
+    };
+    const auto it = kSnippets.find(text);
+    if (it != kSnippets.end()) {
+        ui->inputEdit->setPlainText(it.value());
+        ui->inputEdit->setFocus();
+        ui->inputEdit->moveCursor(QTextCursor::End);
+        return;
+    }
+
     ui->inputEdit->clear();
     m_controller->send(text);
 }
