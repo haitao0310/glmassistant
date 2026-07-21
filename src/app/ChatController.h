@@ -60,6 +60,9 @@ private:
     State m_state = State::Idle;
     QList<Message> m_messages;
     GenerationParams m_params;
+    int m_lastPromptTokens = 0;
+    int m_lastCompletionTokens = 0;
+    int m_lastTotalTokens = 0;
 
     void setState(State s);
     void connectReply(LlmReply *reply);

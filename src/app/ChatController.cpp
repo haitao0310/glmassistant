@@ -38,6 +38,9 @@ void ChatController::recordDebug(LlmReply *reply)
     r.rawRequest = reply->rawRequest();
     r.rawResponse = reply->rawResponse();
     r.timestamp = QDateTime::currentMSecsSinceEpoch();
+    r.promptTokens = m_lastPromptTokens;
+    r.completionTokens = m_lastCompletionTokens;
+    r.totalTokens = m_lastTotalTokens;
     m_debug->record(r);
 }
 
@@ -175,6 +178,9 @@ void ChatController::connectReply(LlmReply *reply)
     });
 
     QObject::connect(reply, &LlmReply::usageReceived, this, [this](int p, int c, int t) {
+        m_lastPromptTokens = p;
+        m_lastCompletionTokens = c;
+        m_lastTotalTokens = t;
         emit tokenReported(p, c, t);
     });
 }

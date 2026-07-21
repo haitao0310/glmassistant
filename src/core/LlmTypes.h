@@ -56,6 +56,9 @@ struct RequestRecord {
     QString rawRequest;
     QString rawResponse;
     qint64 timestamp = 0;
+    int promptTokens = 0;
+    int completionTokens = 0;
+    int totalTokens = 0;
 };
 
 } // namespace glm

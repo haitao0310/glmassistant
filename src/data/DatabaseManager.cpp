@@ -81,6 +81,15 @@ bool DatabaseManager::ensureSchema()
     // C2 索引(性能优化):按会话查消息/请求
     exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp)"));
     exec(QStringLiteral("CREATE INDEX IF NOT EXISTS idx_requests_session ON requests(session_id)"));
+
+    // v3: requests 表加 token 列(Token 统计持久化)
+    if (version < 3) {
+        exec(QStringLiteral("ALTER TABLE requests ADD COLUMN prompt_tokens INTEGER DEFAULT 0"));
+        exec(QStringLiteral("ALTER TABLE requests ADD COLUMN completion_tokens INTEGER DEFAULT 0"));
+        exec(QStringLiteral("ALTER TABLE requests ADD COLUMN total_tokens INTEGER DEFAULT 0"));
+        exec(QStringLiteral("INSERT INTO schema_version(version) VALUES(3)"));
+        logInfo("db", QStringLiteral("schema v3: requests +token columns"));
+    }
     return true;
 }
 
@@ -194,8 +203,8 @@ bool DatabaseManager::clearMessages(const QString &sessionId)
 int DatabaseManager::createRequest(const RequestRecord &r)
 {
     QSqlQuery q(m_db);
-    q.prepare(QStringLiteral("INSERT INTO requests(session_id, model, temperature, top_p, max_tokens, raw_request, raw_response, timestamp) "
-        "VALUES(?,?,?,?,?,?,?,?)"));
+    q.prepare(QStringLiteral("INSERT INTO requests(session_id, model, temperature, top_p, max_tokens, raw_request, raw_response, timestamp, prompt_tokens, completion_tokens, total_tokens) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?)"));
     q.addBindValue(r.sessionId);
     q.addBindValue(r.model);
     q.addBindValue(r.temperature);
@@ -204,6 +213,9 @@ int DatabaseManager::createRequest(const RequestRecord &r)
     q.addBindValue(r.rawRequest);
     q.addBindValue(r.rawResponse);
     q.addBindValue(r.timestamp);
+    q.addBindValue(r.promptTokens);
+    q.addBindValue(r.completionTokens);
+    q.addBindValue(r.totalTokens);
     if (!q.exec()) { logError("db", "createRequest: " + q.lastError().text()); return -1; }
     return q.lastInsertId().toInt();
 }
