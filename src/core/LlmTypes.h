@@ -46,6 +46,14 @@ struct GenerationParams {
     int maxTokens = 2048;
 };
 
+// Prompt 模板(用户保存的常用 prompt)
+struct PromptTemplate {
+    int id = 0;
+    QString name;
+    QString content;
+    qint64 createdTime = 0;
+};
+
 struct RequestRecord {
     int id = 0;
     QString sessionId;

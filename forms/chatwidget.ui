@@ -28,6 +28,11 @@
        <property name="text"><string>导出</string></property>
       </widget>
      </item>
+     <item>
+      <widget class="QPushButton" name="promptBtn">
+       <property name="text"><string>模板</string></property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>

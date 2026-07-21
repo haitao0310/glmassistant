@@ -6,6 +6,7 @@
 #include "../infrastructure/ThemeManager.h"
 #include "../infrastructure/SettingsManager.h"
 #include "SettingsDialog.h"
+#include "../data/DatabaseManager.h"
 
 #include <QTextCursor>
 #include <QApplication>
@@ -16,6 +17,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <QDateTime>
+#include <QCursor>
 
 ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *sessions, QWidget *parent)
     : QWidget(parent)
@@ -64,6 +66,31 @@ ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *ses
         if (dlg.exec() == QDialog::Accepted) {
             glm::ThemeManager::apply(glm::SettingsManager::instance().theme(), qApp);
         }
+    });
+    connect(ui->promptBtn, &QPushButton::clicked, this, [this]{
+        const auto prompts = glm::DatabaseManager::instance().prompts();
+        if (prompts.isEmpty()) {
+            ui->statusLabel->setText(tr("暂无模板(在调试 tab 或后续 UI 创建)"));
+            return;
+        }
+        QMenu menu(this);
+        for (const auto &p : prompts) {
+            menu.addAction(p.name, this, [this, content = p.content]{
+                ui->inputEdit->setPlainText(content);
+                ui->inputEdit->setFocus();
+                ui->inputEdit->moveCursor(QTextCursor::End);
+            });
+        }
+        menu.addSeparator();
+        menu.addAction(tr("新建模板(复制当前输入)"), this, [this]{
+            const QString text = ui->inputEdit->toPlainText().trimmed();
+            if (text.isEmpty()) return;
+            const QString name = QStringLiteral("模板_%1").arg(
+                glm::DatabaseManager::instance().prompts().size() + 1);
+            glm::DatabaseManager::instance().createPrompt(name, text);
+            ui->statusLabel->setText(tr("已保存模板: %1").arg(name));
+        });
+        menu.exec(QCursor::pos());
     });
     connect(ui->exportBtn, &QPushButton::clicked, this, [this]{
         const auto hist = m_controller->history();

@@ -90,6 +90,15 @@ bool DatabaseManager::ensureSchema()
         exec(QStringLiteral("INSERT INTO schema_version(version) VALUES(3)"));
         logInfo("db", QStringLiteral("schema v3: requests +token columns"));
     }
+
+    // v4: prompts 表(Prompt 模板库)
+    if (version < 4) {
+        exec(QStringLiteral("CREATE TABLE IF NOT EXISTS prompts ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "name TEXT NOT NULL, content TEXT NOT NULL, created_time INTEGER)"));
+        exec(QStringLiteral("INSERT INTO schema_version(version) VALUES(4)"));
+        logInfo("db", QStringLiteral("schema v4: prompts table"));
+    }
     return true;
 }
 
@@ -262,6 +271,44 @@ bool DatabaseManager::deleteRequest(int id)
 {
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral("DELETE FROM requests WHERE id=?"));
+    q.addBindValue(id);
+    return q.exec();
+}
+
+int DatabaseManager::createPrompt(const QString &name, const QString &content)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("INSERT INTO prompts(name, content, created_time) VALUES(?,?,?)"));
+    q.addBindValue(name);
+    q.addBindValue(content);
+    q.addBindValue(QDateTime::currentMSecsSinceEpoch());
+    if (!q.exec()) { logError("db", "createPrompt: " + q.lastError().text()); return -1; }
+    return q.lastInsertId().toInt();
+}
+
+QList<PromptTemplate> DatabaseManager::prompts()
+{
+    QList<PromptTemplate> result;
+    QSqlQuery q(m_db);
+    if (!q.exec(QStringLiteral("SELECT id, name, content, created_time FROM prompts ORDER BY id DESC"))) {
+        logError("db", "prompts: " + q.lastError().text());
+        return result;
+    }
+    while (q.next()) {
+        PromptTemplate p;
+        p.id = q.value(0).toInt();
+        p.name = q.value(1).toString();
+        p.content = q.value(2).toString();
+        p.createdTime = q.value(3).toLongLong();
+        result.append(p);
+    }
+    return result;
+}
+
+bool DatabaseManager::deletePrompt(int id)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("DELETE FROM prompts WHERE id=?"));
     q.addBindValue(id);
     return q.exec();
 }
