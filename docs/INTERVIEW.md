@@ -42,15 +42,16 @@ UI 层(mainwindow/ChatWidget/DebugView)
   - Q: Aborted 为什么不复用 Error? → 用户主动 vs 系统错,UX 区分。
   - Q: 断网怎么 Streaming→Error? → `LlmReply::errorOccurred` → Controller。
 
-### 3. Provider 抽象(`ILlmProvider` + Registry)
-- **是什么**:`ILlmProvider` 接口,`Glm/Ollama` 实现,`ProviderRegistry` 工厂。
-- **为什么**:多厂商扩展(ADR-001),业务层不绑死;P5 加 Ollama 零改业务层。
-- **怎么做**:`ILlmProvider{send/models/id/displayName}`;各实现;Registry 按 id 取;依赖注入。
-- **坑**:API 差异(OpenAI 兼容格式统一);Registry 不持所有权(main 管生命周期)。
-- **边界**:GLM + Ollama 两厂商。
+### 3. Provider 抽象(`ILlmProvider` + Registry + 热切换)
+- **是什么**:`ILlmProvider` 接口,`Glm/Ollama` 实现,`ProviderRegistry` 工厂,UI ComboBox 热切换。
+- **为什么**:多厂商扩展(ADR-001),业务层不绑死;加 Ollama 零改业务层。
+- **怎么做**:`ILlmProvider{send/models/id/displayName}`;`ProviderUtils`(setupSseStreaming + serializeOpenAiRequest)消除 90% 重复;`ProviderRegistry` 按 id 取;`ChatController` 持 Registry,`setProviderById` 热切换;ParamPanel `fillProviders(Registry.ids())` + `providerChanged` 信号(不硬编码)。
+- **坑**:API 差异(OpenAI 兼容格式统一);Registry 不持所有权(main 管);ProviderUtils 提取用组合不用继承(防 God Base)。
+- **边界**:GLM + Ollama + 未来 OpenAI/DeepSeek 零成本(setupSseStreaming 通用)。
 - **追问**:
   - Q: `send` 返回 `LlmReply*` 非 `future`? → Qt 信号槽适合流式增量,future 不支持。
-  - Q: Registry 不持所有权会悬空? → main 管,Registry 只索引。
+  - Q: 热切换怎么不硬编码? → ProviderRegistry.ids() 动态填 ComboBox,ChatController.setProviderById 从 Registry 取。
+  - Q: 为什么 ProviderUtils 是自由函数不是基类? → 组合优于继承(防 God Base);Claude/Gemini 非兼容也能复用 setupSseStreaming。
 
 ### 4. 中间件管道(`IMiddleware` + Pipeline + Retry + Cache)
 - **是什么**:请求前责任链(中间件)+ 请求级 Retry(HttpClient)+ Cache(CachingProvider)。
@@ -86,27 +87,27 @@ UI 层(mainwindow/ChatWidget/DebugView)
   - Q: 同步 embed 为什么用 QEventLoop? → RetrievalTool::invoke 是同步接口(ITool),Agent 工具同步;embedAsync 是异步 API(信号),批量/非阻塞场景用。
   - Q: embedAsync 怎么避免 QEventLoop? → HTTP `dataReceived/finished` 信号累积响应,finished 时 parseEmbedding + emit embeddingReady,无嵌套事件循环。
 
-### 7. SQLite 持久化(`DatabaseManager`)
-- **是什么**:单例,会话/消息/请求 三表,schema 版本迁移 + 索引 + 事务。
+### 7. SQLite 持久化(`DatabaseManager` + Token 统计 + Prompt 模板)
+- **是什么**:单例,会话/消息/请求/模板 四表,schema v1-v4 版本迁移 + 索引 + 事务。
 - **为什么**:本地持久化(重启不丢),版本迁移防玩具 DoD(可演进);索引提速;事务保原子。
-- **怎么做**:`ensureSchema` 检 `schema_version`,按版本建表(v1 sessions/messages,v2 requests)+ 建索引(`idx_messages_session` session_id+timestamp,`idx_requests_session`);CRUD;`appendMessage` 事务(transaction + INSERT + UPDATE + commit,失败 rollback)。
-- **坑**:NOT NULL(assistant 预占 content 空 → 改 finished 插);事务(INSERT+UPDATE 原子,防半成功);索引(按 session_id 查消息快)。
-- **边界**:v1/v2 迁移 + 索引 + 事务。
+- **怎么做**:`ensureSchema` 检 `schema_version`,按版本建表/改表:v1 sessions/messages,v2 requests,v3 requests+token 列(ALTER TABLE),v4 prompts(模板库);建索引(`idx_messages_session`,`idx_requests_session`);CRUD;`appendMessage` 事务。Token:usageReceived → m_lastXxx → recordDebug → createRequest 存 prompt_tokens/completion_tokens/total_tokens。
+- **坑**:NOT NULL(assistant 预占 content 空 → 改 finished 插);事务(INSERT+UPDATE 原子);浮点精度(temperature 0.3→0.30000000000000004 → GLM 400,serializeOpenAiRequest 格式化 2 位);ALTER TABLE 加列(v3/v4 不丢老数据)。
+- **边界**:v1-v4 迁移 + 索引 + 事务 + Token 持久化 + Prompt 模板。
 - **追问**:
-  - Q: assistant 为什么 finished 插? → 预占 content 空 NOT NULL 失败。
-  - Q: 事务保证什么? → INSERT 消息 + UPDATE 会话时间 原子,防不一致。
-  - Q: 为什么 session_id+timestamp 索引? → 按会话查消息(常见)按时间排,复合索引加速。
-  - Q: schema 迁移怎么演进? → `schema_version` 表记版本,`if(version<N)` 建表/改表,不丢老数据。
+  - Q: schema 迁移怎么演进? → `schema_version` 表记版本,`if(version<N)` 建表/ALTER TABLE,不丢老数据。
+  - Q: Token 怎么持久化? → SSE 最后帧含 usage → 解析 → RequestRecord.token → DB 存。
+  - Q: 浮点精度怎么踩坑? → 0.3 序列化出精度 GLM 400;QRegularExpression 替换为 2 位小数。
 
-### 8. 分层架构 + ADR(`ARCHITECTURE.md`)
-- **是什么**:6 层 + 9 ADR(决策记录)。
-- **为什么**:解耦(依赖单向)+ 决策可追溯。
-- **怎么做**:`src/` 按层分包;ADR-001~009 记决策(Provider/SSE/信号/namespace/错误/基础设施/i18n/组装/状态机)。
-- **坑**:循环依赖(避免);Q_OBJECT moc 坑(.h 要在 SOURCES 让 AUTOMOC 扫)。
-- **边界**:9 ADR 覆盖关键决策。
+### 8. 分层架构 + UI Form 模式 + ADR(`ARCHITECTURE.md`)
+- **是什么**:6 层 + 9 ADR + UI 组件用 .ui Form 模式(对齐 NDATools)。
+- **为什么**:解耦(依赖单向)+ 决策可追溯 + UI 与逻辑分离(SoC)。
+- **怎么做**:`src/` 按层分包;UI 组件 = .ui(Designer)+ .h(声明)+ .cpp(逻辑/connect),放 `forms/`;MainWindow 纯容器(QTabWidget 组装,~33 行);ChatWidget/ParamPanel/DebugView/SettingsDialog 各自独立 Form;信号 connect 全在构造函数(SoC:UI 构建 vs 信号绑定分离)。
+- **坑**:循环依赖(避免);Q_OBJECT moc(.h 要在 SOURCES);AUTOUIC 搜索路径(`AUTOUIC_SEARCH_PATHS forms/`)。
+- **边界**:9 ADR + .ui Form 模式(4 个 UI 组件)。
 - **追问**:
   - Q: Logger 为什么基础设施层? → 横切关注点,所有层用。
-  - Q: 保证依赖单向? → 分层规范 + 代码审查。
+  - Q: 为什么用 .ui 不纯 cpp? → 可视化设计(Designer)+ 声明实现分离 + 对齐 NDATools Form 模式。
+  - Q: MainWindow 为什么这么小? → 只做容器组装(Tab+closeEvent),对话区在 ChatWidget(SoC)。
 
 ### 9. 异步/生命周期(`LlmReply` + shared_ptr + connect context)
 - **是什么**:`LlmReply`(QObject 信号)+ `shared_ptr` + `QObject::connect` 第 3 参 context 管生命周期。
@@ -124,10 +125,14 @@ UI 层(mainwindow/ChatWidget/DebugView)
 
 1. **启动** → 多会话侧栏(新建/切换/删除)
 2. **对话**:输入"你好" → SSE 流式打字机(逐字出现)
-3. **调参**:temperature 滑块 → 影响下次生成
-4. **中断**:生成中点"停止" → Aborted 态
-5. **调试 tab**:看原始请求/响应 JSON → 重放改参
-6. (选讲)**Agent/RAG**:工具调用循环
+3. **Token 统计**:完成后 statusLabel 显示 `↑X ↓Y = Z tokens | 累计 N`
+4. **Provider 切换**:ParamPanel Provider 下拉切 Glm/Ollama
+5. **快捷指令**:输入 `/translate` → 展开预设 prompt → 补内容发送
+6. **消息复制**:右键消息区 → 复制选中/全部
+7. **会话导出**:点导出 → Markdown 文件
+8. **设置对话框**:点设置 → API Key 输入 + 主题切换
+9. **调试 tab**:看原始请求/响应 JSON → 重放改参
+10. (选讲)**Agent/RAG**:工具调用循环
 
 ## 高频预备问题
 
@@ -138,6 +143,9 @@ UI 层(mainwindow/ChatWidget/DebugView)
 - **错误怎么处理?** 友好提示(401→检查 key / 超时→重试 / 断网→检查网络),非 raw 日志
 - **多轮上下文怎么传?** 完整 messages 数组(累积历史),超 token 中间件截断
 - **Qt 信号槽 vs 回调?** 信号槽异步 + 跨线程安全 + UI 绑定方便;回调易生命周期失控
+- **QSettings 怎么用?** SettingsManager 封装(params/theme/window/session/apiKey 存 ini,重启恢复)
+- **Provider 怎么热切换?** ProviderRegistry.ids() 填 ComboBox,ChatController.setProviderById 从 Registry 取,不硬编码
+- **Token 怎么统计?** SSE 最后帧解析 usage → DB schema v3 持久化,statusLabel 显示
 
 ## 讲解节奏建议
 
