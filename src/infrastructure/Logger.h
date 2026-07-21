@@ -5,25 +5,27 @@
 
 namespace glm {
 
-// 横切日志(ADR-006):分类 + 可选文件 sink。
-// 默认输出 qDebug(Qt Creator 输出面板);install() 后追加文件。
-// 用法:logInfo("network") 不适用,改:logInfo("network", "connected");
 enum class LogLevel { Debug, Info, Warning, Error };
 
+// 日志系统:按日期分文件 + 大小滚动 + 启动 Banner + 多线程安全。
 class Logger
 {
 public:
-    static void install(const QString &fileDir = {});   // 启动时调,设文件 sink
-    static void setLevel(LogLevel level);                // 过滤级别
+    static void install(const QString &fileDir = {});
+    static void setLevel(LogLevel level);
     static void log(LogLevel level, const QString &category, const QString &message);
 };
 
-// 便捷函数(category 分类,如 "network"/"sse"/"db")
 void logDebug(const QString &category, const QString &msg);
 void logInfo(const QString &category, const QString &msg);
 void logWarning(const QString &category, const QString &msg);
 void logError(const QString &category, const QString &msg);
 
 } // namespace glm
+
+// 宏(简化调用)
+#define LOG_INFO(cat, msg)  glm::logInfo(cat, msg)
+#define LOG_WARN(cat, msg)  glm::logWarning(cat, msg)
+#define LOG_ERROR(cat, msg) glm::logError(cat, msg)
 
 #endif // GLM_LOGGER_H

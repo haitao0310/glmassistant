@@ -3,8 +3,10 @@
 #include <QDebug>
 #include <QFile>
 #include <QDir>
-#include <QStandardPaths>
+#include <QFileInfo>
+#include <QDate>
 #include <QDateTime>
+#include <QStandardPaths>
 #include <QMutex>
 #include <QMutexLocker>
 
@@ -12,29 +14,68 @@ namespace glm {
 
 namespace {
 LogLevel g_level = LogLevel::Debug;
-QString g_filePath;   // 非空则同时写文件
+QString g_filePath;
+QString g_fileDir;
+QMutex g_mutex;
 
-const char *levelName(LogLevel l)
+// 今天日志文件名:GlmAssistant_yyyyMMdd.log
+QString todayFileName()
 {
-    switch (l) {
-    case LogLevel::Debug:   return "DEBUG";
-    case LogLevel::Info:    return "INFO";
-    case LogLevel::Warning: return "WARN";
-    case LogLevel::Error:   return "ERROR";
+    return QStringLiteral("GlmAssistant_%1.log")
+        .arg(QDate::currentDate().toString(QStringLiteral("yyyyMMdd")));
+}
+
+// >5MB 归档(rename 加时间戳)
+void rotateIfNeeded()
+{
+    if (g_filePath.isEmpty()) return;
+    const QFileInfo info(g_filePath);
+    if (info.size() > 5 * 1024 * 1024) {
+        const QString rolled = g_filePath + QStringLiteral(".")
+            + QDateTime::currentDateTime().toString(QStringLiteral("hhmmss"));
+        QFile::rename(g_filePath, rolled);
     }
-    return "?";
+}
+
+// 跨天建新文件(进程跨午夜运行时)
+void checkDateSwitch()
+{
+    if (g_fileDir.isEmpty() || g_filePath.isEmpty()) return;
+    const QString today = todayFileName();
+    if (!g_filePath.contains(today)) {
+        g_filePath = g_fileDir + QStringLiteral("/") + today;
+    }
+}
+
+void writeToFile(const QString &line)
+{
+    checkDateSwitch();
+    rotateIfNeeded();
+    QFile f(g_filePath);
+    if (f.open(QIODevice::Append | QIODevice::Text)) {
+        f.write(line.toUtf8());
+        f.write("\n");
+    }
 }
 } // namespace
 
 void Logger::install(const QString &fileDir)
 {
-    // 默认 %APPDATA%/GlmAssistant(规范存储,不污染 exe 目录)
-    QString dir = fileDir.isEmpty()
+    g_fileDir = fileDir.isEmpty()
         ? QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
         : fileDir;
-    if (dir.isEmpty()) return;     // 无可写位置则只控制台
-    QDir().mkpath(dir);
-    g_filePath = dir + QStringLiteral("/GlmAssistant.log");
+    if (g_fileDir.isEmpty()) return;
+    QDir().mkpath(g_fileDir);
+    g_filePath = g_fileDir + QStringLiteral("/") + todayFileName();
+
+    // 启动 Banner
+    QMutexLocker lock(&g_mutex);
+    QFile f(g_filePath);
+    if (f.open(QIODevice::Append | QIODevice::Text)) {
+        f.write(QStringLiteral("======== GlmAssistant v0.1.0 | %1 ========\n")
+                    .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss")))
+                    .toUtf8());
+    }
 }
 
 void Logger::setLevel(LogLevel level) { g_level = level; }
@@ -43,13 +84,21 @@ void Logger::log(LogLevel level, const QString &category, const QString &message
 {
     if (static_cast<int>(level) < static_cast<int>(g_level)) return;
 
+    const QString levelStr = [level] {
+        switch (level) {
+        case LogLevel::Debug:   return QStringLiteral("DEBUG");
+        case LogLevel::Info:    return QStringLiteral("INFO");
+        case LogLevel::Warning: return QStringLiteral("WARN");
+        case LogLevel::Error:   return QStringLiteral("ERROR");
+        }
+        return QStringLiteral("?");
+    }();
+
     const QString line = QStringLiteral("[%1][%2][%3] %4")
         .arg(QDateTime::currentDateTime().toString(QStringLiteral("hh:mm:ss.zzz")),
-             QString::fromLatin1(levelName(level)),
-             category,
-             message);
+             levelStr, category, message);
 
-    // 控制台(Qt Creator 输出面板)
+    // 控制台
     switch (level) {
     case LogLevel::Error:   qCritical().noquote() << line; break;
     case LogLevel::Warning: qWarning().noquote() << line; break;
@@ -58,13 +107,8 @@ void Logger::log(LogLevel level, const QString &category, const QString &message
 
     // 文件(多线程安全)
     if (!g_filePath.isEmpty()) {
-        static QMutex mtx;                       // C++11 magic static,线程安全初始化
-        QMutexLocker lock(&mtx);
-        QFile f(g_filePath);
-        if (f.open(QIODevice::Append | QIODevice::Text)) {
-            f.write(line.toUtf8());
-            f.write("\n");
-        }
+        QMutexLocker lock(&g_mutex);
+        writeToFile(line);
     }
 }
 
