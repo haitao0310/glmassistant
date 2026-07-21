@@ -22,8 +22,9 @@ public:
 
     QString newSession(const QString &title = {});   // 创建 + 设为当前,返回 id
     void switchTo(const QString &id);                 // 切换 + 加载历史
-    void deleteCurrent();                             // 删当前 → 切首个或空
+    void deleteCurrent();
     void renameCurrent(const QString &title);
+    void rename(const QString &id, const QString &title);
 
 signals:
     void sessionListChanged();                            // 会话列表变(侧栏刷新)

@@ -67,6 +67,22 @@ ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *ses
     connect(m_sessions, &glm::SessionManager::currentChanged, this, &ChatWidget::onCurrentSessionChanged);
     connect(m_sessions, &glm::SessionManager::messagesLoaded, m_controller, &glm::ChatController::setSession);
 
+    // 会话重命名(双击编辑 itemChanged)
+    connect(ui->sessionList, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
+        if (!item) return;
+        const QString id = item->data(Qt::UserRole).toString();
+        if (!id.isEmpty()) m_sessions->rename(id, item->text());
+    });
+
+    // 搜索过滤(实时)
+    connect(ui->searchEdit, &QLineEdit::textChanged, this, [this](const QString &keyword) {
+        for (int i = 0; i < ui->sessionList->count(); ++i) {
+            auto *item = ui->sessionList->item(i);
+            const bool match = keyword.isEmpty() || item->text().contains(keyword, Qt::CaseInsensitive);
+            item->setHidden(!match);
+        }
+    });
+
     // 按钮
     connect(ui->sendBtn, &QPushButton::clicked, this, &ChatWidget::onSendClicked);
     connect(ui->newSessionBtn, &QPushButton::clicked, this, [this]{ m_sessions->newSession(); });
@@ -205,7 +221,11 @@ void ChatWidget::refreshSessionList()
     const QString cur = m_sessions->currentSessionId();
     int curRow = -1;
     for (int i = 0; i < ss.size(); ++i) {
-        ui->sessionList->addItem(ss.at(i).title.isEmpty() ? tr("(无标题)") : ss.at(i).title);
+        const QString title = ss.at(i).title.isEmpty() ? tr("(无标题)") : ss.at(i).title;
+        auto *item = new QListWidgetItem(title);
+        item->setData(Qt::UserRole, ss.at(i).id);   // 存 session id(重命名用)
+        item->setFlags(item->flags() | Qt::ItemIsEditable);   // 双击可编辑
+        ui->sessionList->addItem(item);
         if (ss.at(i).id == cur) curRow = i;
     }
     if (curRow >= 0) ui->sessionList->setCurrentRow(curRow);

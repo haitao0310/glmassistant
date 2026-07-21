@@ -65,4 +65,10 @@ void SessionManager::renameCurrent(const QString &title)
     emit sessionListChanged();
 }
 
+void SessionManager::rename(const QString &id, const QString &title)
+{
+    DatabaseManager::instance().renameSession(id, title);
+    emit sessionListChanged();
+}
+
 } // namespace glm
