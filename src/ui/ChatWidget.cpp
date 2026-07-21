@@ -122,6 +122,9 @@ void ChatWidget::onSendClicked()
         {QStringLiteral("/code"), QStringLiteral("请用 C++ 和 Qt6 实现以下功能:\n\n")},
         {QStringLiteral("/review"), QStringLiteral("请 Code Review 以下代码,关注:\n1. Bug\n2. 架构\n3. 性能\n4. 线程安全\n\n代码:\n\n")},
         {QStringLiteral("/explain"), QStringLiteral("请详细解释以下概念/代码:\n\n")},
+        {QStringLiteral("/refactor"), QStringLiteral("请重构以下代码,关注:\n1. 可维护性\n2. 可扩展性\n3. SOLID\n4. 线程安全\n\n代码:\n\n")},
+        {QStringLiteral("/test"), QStringLiteral("请为以下代码编写 Qt Test 单元测试:\n\n")},
+        {QStringLiteral("/doc"), QStringLiteral("请为以下代码编写文档注释(Doxygen 格式):\n\n")},
     };
     const auto it = kSnippets.find(text);
     if (it != kSnippets.end()) {
