@@ -27,6 +27,16 @@ ChatWidget::ChatWidget(glm::ChatController *controller, glm::SessionManager *ses
 {
     ui->setupUi(this);
 
+    // 代码块 CSS 美化(背景+边框+等宽字体)
+    ui->chatView->document()->setDefaultStyleSheet(
+        QStringLiteral(
+            "pre { background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 8px; "
+            "  font-family: Consolas, 'Courier New', monospace; font-size: 13px; }"
+            "code { background-color: #f0f0f0; font-family: Consolas, 'Courier New', monospace; "
+            "  padding: 1px 3px; border-radius: 2px; }"
+        )
+    );
+
     // Controller → UI
     connect(m_controller, &glm::ChatController::messageAppended, this, [this](const glm::Message &){ rerenderChat(); });
     connect(m_controller, &glm::ChatController::chunkReceived, this, [this](const QString &){ rerenderChat(); });
